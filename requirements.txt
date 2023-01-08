@@ -1,0 +1,6 @@
+depthai
+opencv-python
+PyQt5
+pyserial
+robotpy-apriltag
+robotpy-cscore
