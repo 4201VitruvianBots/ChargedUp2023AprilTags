@@ -11,6 +11,8 @@ from PyQt5.QtGui import QIntValidator
 import socket
 import sys
 
+from os.path import basename
+
 import robotpy_apriltag
 from ntcore import NetworkTableInstance
 
@@ -56,14 +58,18 @@ c_handler = logging.StreamHandler()
 log.addHandler(c_handler)
 log.setLevel(logging.INFO)
 
+global NTInstance
 
 def init_networktables():
-    NetworkTableInstance.startClient4(4201)
+    global NTInstance
+    NTInstance = NetworkTableInstance.getDefault()
+    identity = basename(__file__)
+    NTInstance.startClient4(identity)
+    NTInstance.setServer("10.42.1.2")
     hostname = socket.gethostname()
     ip = socket.gethostbyname(hostname)
-    if not NetworkTableInstance.isConnected():
-        log.debug("Could not connect to team client. Trying other addresses...")
-        NetworkTableInstance.startClient([
+
+    secondaryIps = [
             ip
             # '10.42.1.2',
             # ('127.0.0.1', 57599),
@@ -73,10 +79,18 @@ def init_networktables():
             # '192.168.100.25'
             # '172.22.64.1'
             # '169.254.254.200'
-        ])
+        ]
+    tries = 0
+    while not NTInstance.isConnected():
+        log.debug("Could not connect to team client. Trying other addresses...")
+        NTInstance.setServer(secondaryIps[tries])
+        tries = tries + 1
 
-    if NetworkTableInstance.isConnected():
-        log.info("NT Connected to {}".format(NetworkTableInstance.getRemoteAddress()))
+        if tries >= len(secondaryIps):
+            break
+
+    if NTInstance.isConnected():
+        log.info("NT Connected to {}".format(NTInstance.getConnections()))
         return True
     else:
         log.error("Could not connect to NetworkTables. Restarting server...")
@@ -84,6 +98,7 @@ def init_networktables():
 
 
 def main():
+    global NTInstance
     if args.performance_test:
         disabledStdOut = logging.StreamHandler(stream=None)
         log.addHandler(disabledStdOut)
@@ -97,18 +112,24 @@ def main():
     pipeline, pipeline_info = spatialCalculator_pipelines.create_stereoDepth_pipeline()
 
     detector = robotpy_apriltag.AprilTagDetector()
-    detector.setConfig()
-    detector.setQuadThresholdParameters(args.quad_decimate)
-
+    detectorConfig = robotpy_apriltag.AprilTagDetector.Config()
+    detectorConfig.refineEdges = args.refine_edges
+    detectorConfig.quadDecimate = args.quad_decimate
+    detectorConfig.numThreads = args.nthreads
+    detectorConfig.quadSigma = args.quad_sigma
+    detectorConfig.decodeSharpening = args.decode_sharpening
+    detector.setConfig(detectorConfig)
+    detector.addFamily(args.family, 2)
 
     init_networktables()
-    nt_depthai_tab = NetworkTableInstance.getTable("DepthAI")
-    nt_drivetrain_tab = NetworkTableInstance.getTable("Swerve")
+    nt_depthai_tab = NTInstance.getTable("DepthAI")
+    nt_drivetrain_tab = NTInstance.getTable("Swerve")
 
     fps = utils.FPSHandler()
     latency = np.array([])
 
     tag_dictionary = TAG_DICTIONARY
+    valid_tags = [t['ID'] for t in TAG_DICTIONARY['tags']]
 
     with dai.Device(pipeline) as device:
         log.info("USB SPEED: {}".format(device.getUsbSpeed()))
@@ -137,8 +158,17 @@ def main():
             "vfov": constants.CAMERA_PARAMS[productName]["mono"]["vfov"],
             "mount_angle_radians": math.radians(constants.CAMERA_MOUNT_ANGLE),
             "iMatrix": np.array(iMatrix).reshape(3, 3),
+            # fx, fy, cx, cy
             "intrinsicValues": (iMatrix[0][0], iMatrix[1][1], iMatrix[0][2], iMatrix[1][2])
         }
+        detectorIntrinsics = robotpy_apriltag.AprilTagPoseEstimator.Config(
+            constants.TAG_SIZE_M,
+            camera_params['intrinsicValues'][0],
+            camera_params['intrinsicValues'][1],
+            camera_params['intrinsicValues'][2],
+            camera_params['intrinsicValues'][3])
+
+        detectorPoseEstimator = robotpy_apriltag.AprilTagPoseEstimator(detectorIntrinsics)
 
         # device.setIrLaserDotProjectorBrightness(200)
         # device.setIrFloodLightBrightness(1500)
@@ -250,16 +280,18 @@ def main():
             if len(tags) > 0:
                 for tag in tags:
                     if not DISABLE_VIDEO_OUTPUT:
-                        if tag.tag_id not in testGui.getTagFilter():
+                        if tag.getId() not in testGui.getTagFilter():
                             continue
-                        elif tag.tag_id not in TAG_DICTIONARY.keys():
-                            log.warning("Tag ID {} found, but not defined".format(tag.tag_id))
-                    if tag.decision_margin < 30:
-                        log.warning("Tag {} found, but not valid".format(tag.tag_id))
+                        elif tag.getId() not in valid_tags:
+                            log.warning("Tag ID {} found, but not defined".format(tag.getId()))
+                    if tag.getDecisionMargin() < 30:
+                        log.warning("Tag {} found, but not valid".format(tag.getId()))
                         continue
-
-                    topLeftXY = (int(min(tag.corners[:, 0])), int(min(tag.corners[:, 1])))
-                    bottomRightXY = (int(max(tag.corners[:, 0])), int(max(tag.corners[:, 1])))
+                    tagCorners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
+                    xPixels = [p.x for p in tagCorners]
+                    yPixels = [p.y for p in tagCorners]
+                    topLeftXY = (int(min(xPixels)), int(min(yPixels)))
+                    bottomRightXY = (int(max(xPixels)), int(max(yPixels)))
 
                     roi = (topLeftXY[0], topLeftXY[1], bottomRightXY[0], bottomRightXY[1])
 
@@ -271,6 +303,7 @@ def main():
 
                     tagInfo = {
                         "tag": tag,
+                        "corners": tagCorners,
                         "XAngle": tagTranslation['x_angle'],
                         "YAngle": tagTranslation['y_angle'],
                         "topLeftXY": topLeftXY,
@@ -283,25 +316,29 @@ def main():
                     x_pos.append(robotPose['x'])
                     y_pos.append(robotPose['y'])
                     z_pos.append(robotPose['z'])
-                    pose_id.append(tag.tag_id)
-                    log.info("Tag ID: {}\tCenter: {}\tz: {}".format(tag.tag_id, tag.center, spatialData['z']))
+                    pose_id.append(tag.getId())
+                    log.info("Tag ID: {}\tCenter: {}\tz: {}".format(tag.getId(), tag.getCenter(), spatialData['z']))
 
                     # Use this to compare stereoDepth results vs solvePnP
                     if ENABLE_SOLVEPNP:
-                        pnpRobotPose = estimate_robot_pose_with_solvePnP(tag, tagInfo, tag_dictionary, camera_params, robotAngles)
+                        tagDictionaryPose = tag_dictionary['tags'][tag.getId()]['pose']['translation']
+                        pnpRobotPose = estimate_robot_pose_with_solvePnP(tag, tagInfo, tagDictionaryPose, camera_params, robotAngles)
 
+                        tagPose = detectorPoseEstimator.estimate(tag)
+
+                        tagInfo['tagPose'] = tagPose
                         tagInfo['deltaTranslation'] = {
-                            'x': tag.pose_t[0][0] - spatialData['x'],
-                            'y': tag.pose_t[1][0] - spatialData['y'],
-                            'z': tag.pose_t[2][0] - spatialData['z']
+                            'x': tagPose.x - spatialData['x'],
+                            'y': tagPose.y - spatialData['y'],
+                            'z': tagPose.z - spatialData['z']
                         }
 
-                        pnp_tag_id.append(tag.tag_id)
+                        pnp_tag_id.append(tag.getId())
                         pnp_x_pos.append(pnpRobotPose['x'])
                         pnp_y_pos.append(pnpRobotPose['y'])
 
                         log.info("Tag ID: {}\tDelta X: {:.2f}\t"
-                                 "Delta Y: {:.2f}\tDelta Z: {:.2f}".format(tag.tag_id,
+                                 "Delta Y: {:.2f}\tDelta Z: {:.2f}".format(tag.getId(),
                                                                            tagInfo['deltaTranslation']['x'],
                                                                            tagInfo['deltaTranslation']['y'],
                                                                            tagInfo['deltaTranslation']['z']))
@@ -323,7 +360,7 @@ def main():
                                                                       np.std(y_pos),
                                                                       np.std(z_pos)))
             nt_depthai_tab.putNumber("Avg X Pose", np.average(x_pos))
-            nt_depthai_tab.putNumber("Avg Y Pose", np.average(x_pos))
+            nt_depthai_tab.putNumber("Avg Y Pose", np.average(y_pos))
             nt_depthai_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
             nt_depthai_tab.putNumber("latency", latency[-1])
 
@@ -345,18 +382,24 @@ def main():
 
             if not DISABLE_VIDEO_OUTPUT:
                 for detectedTag in detectedTags:
-                    points = detectedTag["tag"].corners.astype(np.int32)
+                    points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
                     # Shift points since this is a snapshot
                     cv2.polylines(frameRight, [points], True, (120, 120, 120), 3)
                     textX = min(points[:, 0])
                     textY = min(points[:, 1]) + 20
-                    cv2.putText(frameRight, "tag_id: {}".format(detectedTag['tag'].tag_id),
+                    cv2.putText(frameRight, "tag_id: {}".format(detectedTag['tag'].getId()),
                                 (textX, textY), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
 
                     if ENABLE_SOLVEPNP:
+                        r_vec = np.array([detectedTag['tagPose'].rotation().x,
+                                          detectedTag['tagPose'].rotation().y,
+                                          detectedTag['tagPose'].rotation().z])
+                        t_vec = np.array([detectedTag['tagPose'].translation().x,
+                                          detectedTag['tagPose'].translation().y,
+                                          detectedTag['tagPose'].translation().z])
                         ipoints, _ = cv2.projectPoints(constants.OPOINTS,
-                                                       detectedTag["tag"].pose_R,
-                                                       detectedTag["tag"].pose_t,
+                                                       r_vec,
+                                                       t_vec,
                                                        camera_params['iMatrix'],
                                                        np.zeros(5))
 

@@ -1,7 +1,7 @@
 
 import numpy as np
 
-TAG_SIZE_M = 0.15
+TAG_SIZE_M = 0.1524
 PADDING_PERCENTAGE = 0.31
 
 CAMERA_MOUNT_ANGLE = 0.0
@@ -10,7 +10,8 @@ CAMERA_MOUNT_HEIGHT = 0.0
 CAMERA_IDS = {
     '14442C10218CCCD200': 'OAK-D',
     '18443010B1FA0C1300': 'OAK-D Lite',
-    '1944301061F9721300': 'OAK-D W Pro PoE'
+    '18443010110CC71200': 'OAK-D Pro W',
+    '1944301061F9721300': 'OAK-D Pro W PoE'
 }
 
 CAMERA_PARAMS = {
@@ -44,7 +45,7 @@ CAMERA_PARAMS = {
             "vfov": 58.0
         },
     },
-    "OAK-D W Pro PoE": {
+    "OAK-D Pro W": {
     # "boardName": "OAK-D Pro W 120",
         "rgb": {
             "hfov": 95.0,
@@ -57,17 +58,8 @@ CAMERA_PARAMS = {
             "rvfov": 70.0
         },
     },
-    "OAK-D Pro PoE FF": {
-        "rgb": {
-            "hfov": 69.0,
-            "vfov": 55.0
-        },
-        "mono": {
-            "hfov": 80.0,
-            "vfov": 55.0,
-        },
-    },
-    "OAK-D Pro W PoE 120": {
+    "OAK-D Pro W PoE": {
+    # "boardName": "OAK-D Pro W 120",
         "rgb": {
             "hfov": 95.0,
             "vfov": 70.0

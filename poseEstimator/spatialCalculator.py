@@ -49,7 +49,7 @@ class HostSpatialsCalc:
 
     # roi has to be list of ints
     def calc_spatials(self, depthFrame, tag, roi, robotAngles, averaging_method=np.mean):
-        tagPose = self.tagDictionary[tag.tag_id]["pose"]
+        tagPose = self.tagDictionary['tags'][tag.getId()]['pose']['translation']
 
         # roi = self._check_input(roi, depthFrame)  # If point was passed, convert it to ROI
         xmin, ymin, xmax, ymax = roi
@@ -61,8 +61,8 @@ class HostSpatialsCalc:
         averageDepth = averaging_method(depthROI[inRange])
 
         centroid = {  # Get centroid of the ROI
-            'x': tag.center[0],
-            'y': tag.center[1]
+            'x': tag.getCenter().x,
+            'y': tag.getCenter().y
         }
 
         midW = int(depthFrame.shape[1] / 2.0)  # middle of the depth img width
@@ -102,10 +102,7 @@ class HostSpatialsCalc:
 
 
 def estimate_robot_pose_from_apriltag(tag, spatialData, camera_params, tagDictionary, frame_shape):
-    if tag.tag_id not in tagDictionary.keys():
-        return None, None
-
-    tagPose = tagDictionary[tag.tag_id]["pose"]
+    tagPose = tagDictionary['tags'][tag.getId()]['pose']['translation']
 
     horizontal_angle_radians = math.atan((tag.center[0] - (frame_shape[1] / 2.0)) / camera_params["hfl"])
     vertical_angle_radians = -math.atan((tag.center[1] - (frame_shape[0] / 2.0)) / camera_params["vfl"])
@@ -132,16 +129,14 @@ def estimate_robot_pose_from_apriltag(tag, spatialData, camera_params, tagDictio
     return robotPose, tag_translation
 
 
-def estimate_robot_pose_with_solvePnP(tag, tagInfo, tag_dictionary, camera_params, robotAngles):
-    tagPose = tag_dictionary[tag.tag_id]["pose"]
-
+def estimate_robot_pose_with_solvePnP(tag, tagInfo, tagPose, camera_params, robotAngles):
     # rvec = np.squeeze(tag.pose_R[0], axis=None)
     # rvec_matrix = cv2.Rodrigues(rvec)[0]
     # proj_matrix = np.hstack((rvec_matrix, tag.pose_t))
     # euler_angles = cv2.decomposeProjectionMatrix(proj_matrix)[6]
 
     camera_pitch = camera_params['mount_angle_radians'] if robotAngles['pitch'] is None else robotAngles['pitch']
-    xy_target_distance = math.cos(camera_pitch + math.radians(tagInfo['YAngle'])) * tag.pose_t[2][0]
+    xy_target_distance = math.cos(camera_pitch + math.radians(tagInfo['YAngle'])) * tagPose['y']
 
     camera_yaw = 0 if robotAngles['yaw'] is None else robotAngles['yaw']
     x_translation = math.cos(math.radians(tagInfo['XAngle']) + camera_yaw) * xy_target_distance
