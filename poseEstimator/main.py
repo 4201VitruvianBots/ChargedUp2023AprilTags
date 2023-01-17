@@ -282,10 +282,10 @@ def main():
                     if not DISABLE_VIDEO_OUTPUT:
                         if tag.getId() not in testGui.getTagFilter():
                             continue
-                        elif tag.getId() not in valid_tags:
-                            log.warning("Tag ID {} found, but not defined".format(tag.getId()))
-                            continue
-                    if tag.getDecisionMargin() < 30:
+                    if tag.getId() not in valid_tags:
+                        log.warning("Tag ID {} found, but not defined".format(tag.getId()))
+                        continue
+                    elif tag.getDecisionMargin() < 30:
                         log.warning("Tag {} found, but not valid".format(tag.getId()))
                         continue
                     tagCorners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
@@ -296,10 +296,7 @@ def main():
 
                     roi = (topLeftXY[0], topLeftXY[1], bottomRightXY[0], bottomRightXY[1])
 
-                    try:
-                        robotPose, tagTranslation, spatialData, = hostSpatials.calc_spatials(depthFrame, tag, roi, robotAngles)
-                    except Exception as e:
-                        log.error("Tag ID {} was used in calc_spatials()".format(tag.getId()))
+                    robotPose, tagTranslation, spatialData, = hostSpatials.calc_spatials(depthFrame, tag, roi, robotAngles)
 
                     if robotPose is None:
                         log.warning("Could not determine robot pose")
