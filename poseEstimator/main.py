@@ -284,6 +284,7 @@ def main():
                             continue
                         elif tag.getId() not in valid_tags:
                             log.warning("Tag ID {} found, but not defined".format(tag.getId()))
+                            continue
                     if tag.getDecisionMargin() < 30:
                         log.warning("Tag {} found, but not valid".format(tag.getId()))
                         continue
