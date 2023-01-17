@@ -296,7 +296,10 @@ def main():
 
                     roi = (topLeftXY[0], topLeftXY[1], bottomRightXY[0], bottomRightXY[1])
 
-                    robotPose, tagTranslation, spatialData, = hostSpatials.calc_spatials(depthFrame, tag, roi, robotAngles)
+                    try:
+                        robotPose, tagTranslation, spatialData, = hostSpatials.calc_spatials(depthFrame, tag, roi, robotAngles)
+                    except Exception as e:
+                        log.error("Tag ID {} was used in calc_spatials()".format(tag.getId()))
 
                     if robotPose is None:
                         log.warning("Could not determine robot pose")
