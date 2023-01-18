@@ -1,40 +1,36 @@
 import argparse
 import copy
-
 import cv2
 import depthai as dai
 import logging
 import math
 import numpy as np
-from PyQt5 import QtGui, QtWidgets, uic
-from PyQt5.QtGui import QIntValidator
+from os.path import basename
 import socket
 import sys
-
-from os.path import basename
+from PyQt5 import QtGui, QtWidgets, uic
+from PyQt5.QtGui import QIntValidator
 
 import robotpy_apriltag
 from ntcore import NetworkTableInstance
 
 from common import constants
 from common import utils
-from pipelines import spatialCalculator_pipelines
-from common.tag_dictionary import TAG_DICTIONARY
-
 from common.imu import navX
+from common.tag_dictionary import TAG_DICTIONARY
+from pipelines import spatialCalculator_pipelines
 from spatialCalculator import HostSpatialsCalc, estimate_robot_pose_with_solvePnP
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', dest='debug', action="store_true", default=False, help='Start in Debug Mode')
 parser.add_argument('-t', dest='test', action="store_true", default=False, help='Start in Test Mode')
 parser.add_argument('-pt', dest='performance_test', action="store_true", default=False, help='Set Performance Test Mode')
-
 parser.add_argument('-f', dest='family', action="store", type=str, default='tag16h5',
                     help='Tag family (default: tag16h5)')
 parser.add_argument('-nt', dest='nthreads', action="store", type=int, default=3,
                     help='nthreads (default: 3)')
-parser.add_argument('-qd', dest='quad_decimate', action="store", type=float, default=4.0,
-                    help='quad_decimate (default: 4)')
+parser.add_argument('-qd', dest='quad_decimate', action="store", type=float, default=2.0,
+                    help='quad_decimate (default: 2)')
 parser.add_argument('-qs', dest='quad_sigma', action="store", type=float, default=0.0,
                     help='quad_sigma (default: 0.0)')
 parser.add_argument('-re', dest='refine_edges', action="store", type=float, default=1.0,
@@ -58,14 +54,15 @@ c_handler = logging.StreamHandler()
 log.addHandler(c_handler)
 log.setLevel(logging.INFO)
 
-global NTInstance
+global NT_Instance
+
 
 def init_networktables():
-    global NTInstance
-    NTInstance = NetworkTableInstance.getDefault()
+    global NT_Instance
+    NT_Instance = NetworkTableInstance.getDefault()
     identity = basename(__file__)
-    NTInstance.startClient4(identity)
-    NTInstance.setServer("10.42.1.2")
+    NT_Instance.startClient4(identity)
+    NT_Instance.setServer("10.42.1.2")
     hostname = socket.gethostname()
     ip = socket.gethostbyname(hostname)
 
@@ -81,16 +78,16 @@ def init_networktables():
             # '169.254.254.200'
         ]
     tries = 0
-    while not NTInstance.isConnected():
+    while not NT_Instance.isConnected():
         log.debug("Could not connect to team client. Trying other addresses...")
-        NTInstance.setServer(secondaryIps[tries])
+        NT_Instance.setServer(secondaryIps[tries])
         tries = tries + 1
 
         if tries >= len(secondaryIps):
             break
 
-    if NTInstance.isConnected():
-        log.info("NT Connected to {}".format(NTInstance.getConnections()))
+    if NT_Instance.isConnected():
+        log.info("NT Connected to {}".format(NT_Instance.getConnections()))
         return True
     else:
         log.error("Could not connect to NetworkTables. Restarting server...")
@@ -98,7 +95,7 @@ def init_networktables():
 
 
 def main():
-    global NTInstance
+    global NT_Instance
     if args.performance_test:
         disabledStdOut = logging.StreamHandler(stream=None)
         log.addHandler(disabledStdOut)
@@ -119,11 +116,10 @@ def main():
     detectorConfig.quadSigma = args.quad_sigma
     detectorConfig.decodeSharpening = args.decode_sharpening
     detector.setConfig(detectorConfig)
-    detector.addFamily(args.family, 2)
+    detector.addFamily(args.family, 0)
 
     init_networktables()
-    nt_depthai_tab = NTInstance.getTable("DepthAI")
-    nt_drivetrain_tab = NTInstance.getTable("Swerve")
+    nt_drivetrain_tab = NT_Instance.getTable("Swerve")
 
     fps = utils.FPSHandler()
     latency = np.array([])
@@ -141,17 +137,23 @@ def main():
         iMatrix = eepromData.cameraData.get(dai.CameraBoardSocket.RIGHT).intrinsicMatrix
 
         if deviceID in constants.CAMERA_IDS:
-            productName = constants.CAMERA_IDS[deviceID]
+            productName = constants.CAMERA_IDS[deviceID]['name']
+            ntTableName = constants.CAMERA_IDS[deviceID]['table']
         else:
             productName = eepromData.productName
+            ntTableName = 'forward_localizer'
 
             if len(productName) == 0:
                 boardName = eepromData.boardName
                 if boardName == 'BW1098OBC':
                     productName = 'OAK-D'
+                    ntTableName = 'forward_localizer'
                 else:
                     log.warning("Product name could not be determined. Defaulting to OAK-D")
                     productName = 'OAK-D'
+                    ntTableName = 'forward_localizer'
+
+        nt_depthai_tab = NT_Instance.getTable(ntTableName)
 
         camera_params = {
             "hfov": constants.CAMERA_PARAMS[productName]["mono"]["hfov"],
@@ -252,7 +254,7 @@ def main():
                     pass
             else:
                 robotAngles = {
-                    'pitch': math.radians(constants.CAMERA_MOUNT_ANGLE),
+                    'pitch': math.radians(nt_drivetrain_tab.getNumber("Pitch_Degrees", 0.0)),
                     'yaw': math.radians(nt_drivetrain_tab.getNumber("Heading_Degrees", 0.0))
                 }
 
@@ -349,13 +351,14 @@ def main():
             avgLatency = np.average(latency) if len(latency) < 100 else np.average(latency[-100:])
             latencyStd = np.std(latency) if len(latency) < 100 else np.std(latency[-100:])
 
-            nt_depthai_tab.putNumberArray("Pose ID", pose_id)
+            nt_depthai_tab.putNumberArray("tid", pose_id)
             nt_depthai_tab.putNumberArray("X Poses", x_pos)
             nt_depthai_tab.putNumberArray("Y Poses", y_pos)
             nt_depthai_tab.putNumberArray("Z Poses", z_pos)
 
             # Merge AprilTag measurements to estimate
-            log.info("Estimated Pose X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(np.average(x_pos), np.average(y_pos), np.average(z_pos)))
+            botPose = [np.average(x_pos), np.average(y_pos), np.average(z_pos)]
+            log.info("Estimated Pose X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(botPose[0], botPose[1], botPose[2]))
             log.info("Std dev X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(np.std(x_pos),
                                                                       np.std(y_pos),
                                                                       np.std(z_pos)))
@@ -367,6 +370,7 @@ def main():
             nt_depthai_tab.putNumberArray("PnP Pose ID", pnp_tag_id)
             nt_depthai_tab.putNumberArray("PnP X Poses", pnp_x_pos)
             nt_depthai_tab.putNumberArray("PnP Y Poses", pnp_y_pos)
+            nt_depthai_tab.putNumberArray("botpose", botPose)
 
             stats['numTags'] = len(detectedTags)
             stats['depthAI'] = {

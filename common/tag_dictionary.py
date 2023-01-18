@@ -2,8 +2,10 @@ import json
 
 File_Path = '../resources/2023-chargedup.json'
 
-TAG_DICTIONARY = {}
-with open(File_Path) as json_file:
-    TAG_DICTIONARY = json.load(json_file)
+try:
+    with open(File_Path) as json_file:
+        TAG_DICTIONARY = json.load(json_file)
 
-print(TAG_DICTIONARY)
+        print(TAG_DICTIONARY)
+except Exception as e:
+    TAG_DICTIONARY = {}

@@ -1,10 +1,5 @@
-import cv2
 import math
 import numpy as np
-import depthai as dai
-
-from common import mathUtils
-from common.tag_dictionary import TAG_DICTIONARY
 
 
 class HostSpatialsCalc:

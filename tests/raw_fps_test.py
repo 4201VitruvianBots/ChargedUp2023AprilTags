@@ -6,7 +6,7 @@ import queue
 import threading
 
 from common import utils
-from spatialCalculatorTest import spatialCalculator_pipelines
+from pipelines import spatialCalculator_pipelines
 
 
 class FPS_Test:
