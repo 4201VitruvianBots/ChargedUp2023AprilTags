@@ -212,7 +212,7 @@ def main():
         }
 
         camera_settings = {
-            'manual_exposure_usec': 10000,
+            'manual_exposure_usec': 2000,
             'manual_exposure_iso': 200,
             'brightness': 5,
             'white_balance': 6000
@@ -284,9 +284,10 @@ def main():
                     if not DISABLE_VIDEO_OUTPUT:
                         if tag.getId() not in testGui.getTagFilter():
                             continue
-                        elif tag.getId() not in valid_tags:
-                            log.warning("Tag ID {} found, but not defined".format(tag.getId()))
-                    if tag.getDecisionMargin() < 30:
+                    if tag.getId() not in valid_tags:
+                        log.warning("Tag ID {} found, but not defined".format(tag.getId()))
+                        continue
+                    elif tag.getDecisionMargin() < 30:
                         log.warning("Tag {} found, but not valid".format(tag.getId()))
                         continue
                     tagCorners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
@@ -480,9 +481,8 @@ def main():
 class DebugWindow(QtWidgets.QWidget):
     def __init__(self, gyro, camera_settings, solvePnp=False):
         super(DebugWindow, self).__init__()
-        uic.loadUi('../designer/debugWindow.ui', self)
-        self.tagFilter = list(range(0, 8))
-        self.tagCheckbox0.stateChanged.connect(lambda: self.updateTagFilter())
+        uic.loadUi('designer/debugWindow.ui', self)
+        self.tagFilter = list(range(1, 9))
         self.tagCheckbox1.stateChanged.connect(lambda: self.updateTagFilter())
         self.tagCheckbox2.stateChanged.connect(lambda: self.updateTagFilter())
         self.tagCheckbox3.stateChanged.connect(lambda: self.updateTagFilter())
@@ -490,6 +490,7 @@ class DebugWindow(QtWidgets.QWidget):
         self.tagCheckbox5.stateChanged.connect(lambda: self.updateTagFilter())
         self.tagCheckbox6.stateChanged.connect(lambda: self.updateTagFilter())
         self.tagCheckbox7.stateChanged.connect(lambda: self.updateTagFilter())
+        self.tagCheckbox8.stateChanged.connect(lambda: self.updateTagFilter())
 
         self.gyro = gyro
         if self.gyro is not None:
@@ -606,10 +607,12 @@ class DebugWindow(QtWidgets.QWidget):
         self.updateStatsValue()
 
     def updateTagFilter(self):
-        self.tagFilter = np.array(np.where([self.tagCheckbox0.isChecked(), self.tagCheckbox1.isChecked(),
-                                            self.tagCheckbox2.isChecked(), self.tagCheckbox3.isChecked(),
-                                            self.tagCheckbox4.isChecked(), self.tagCheckbox5.isChecked(),
-                                            self.tagCheckbox6.isChecked(), self.tagCheckbox7.isChecked()])).tolist()[0]
+        filter = np.array(np.where([self.tagCheckbox1.isChecked(), self.tagCheckbox2.isChecked(),
+                                    self.tagCheckbox3.isChecked(), self.tagCheckbox4.isChecked(),
+                                    self.tagCheckbox5.isChecked(), self.tagCheckbox6.isChecked(),
+                                    self.tagCheckbox7.isChecked(), self.tagCheckbox8.isChecked()])) + 1
+
+        self.tagFilter = filter.tolist()
 
     def getTagFilter(self):
         return self.tagFilter

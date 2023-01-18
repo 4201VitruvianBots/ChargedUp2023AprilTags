@@ -44,7 +44,7 @@ class HostSpatialsCalc:
 
     # roi has to be list of ints
     def calc_spatials(self, depthFrame, tag, roi, robotAngles, averaging_method=np.mean):
-        tagPose = self.tagDictionary['tags'][tag.getId()]['pose']['translation']
+        tagPose = self.tagDictionary['tags'][tag.getId() - 1]['pose']['translation']
 
         # roi = self._check_input(roi, depthFrame)  # If point was passed, convert it to ROI
         xmin, ymin, xmax, ymax = roi
@@ -97,7 +97,7 @@ class HostSpatialsCalc:
 
 
 def estimate_robot_pose_from_apriltag(tag, spatialData, camera_params, tagDictionary, frame_shape):
-    tagPose = tagDictionary['tags'][tag.getId()]['pose']['translation']
+    tagPose = self.tagDictionary['tags'][tag.getId() - 1]['pose']['translation']
 
     horizontal_angle_radians = math.atan((tag.center[0] - (frame_shape[1] / 2.0)) / camera_params["hfl"])
     vertical_angle_radians = -math.atan((tag.center[1] - (frame_shape[0] / 2.0)) / camera_params["vfl"])

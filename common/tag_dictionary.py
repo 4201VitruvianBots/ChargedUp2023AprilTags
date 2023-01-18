@@ -1,6 +1,6 @@
 import json
 
-File_Path = '../resources/2023-chargedup.json'
+File_Path = 'resources/2023-chargedup.json'
 
 try:
     with open(File_Path) as json_file:
