@@ -1,5 +1,8 @@
 import argparse
 import copy
+import threading
+from time import sleep
+
 import cv2
 import depthai as dai
 import logging
@@ -8,14 +11,15 @@ import numpy as np
 from os.path import basename
 import socket
 import sys
-from PyQt5 import QtGui, QtWidgets, uic
-from PyQt5.QtGui import QIntValidator
 
+import cscore as cs
 import robotpy_apriltag
 from ntcore import NetworkTableInstance
 
+from aprilTags.apriltagDetector import AprilTagDetector
 from common import constants
 from common import utils
+from common.depthaiUtils import generateCameraParameters
 from common.imu import navX
 from common.tag_dictionary import TAG_DICTIONARY
 from pipelines import spatialCalculator_pipelines
@@ -47,6 +51,8 @@ parser.add_argument('-r', dest='record_video', action="store_true", default=Fals
 
 parser.add_argument('-dic', dest='tag_dictionary', action="store", type=str, default='test', help='Set Tag Dictionary')
 
+parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Forward_Localizers', 'Rear_Localizers'])
+
 args = parser.parse_args()
 
 log = logging.getLogger(__name__)
@@ -54,150 +60,71 @@ c_handler = logging.StreamHandler()
 log.addHandler(c_handler)
 log.setLevel(logging.INFO)
 
-global NT_Instance
 
+class LocalizationHost:
+    initialized = False
 
-def init_networktables():
-    global NT_Instance
-    NT_Instance = NetworkTableInstance.getDefault()
-    identity = basename(__file__)
-    NT_Instance.startClient4(identity)
-    NT_Instance.setServer("10.42.1.2")
-    hostname = socket.gethostname()
-    ip = socket.gethostbyname(hostname)
+    def __init__(self):
+        self.NT_Instance = self.init_networktables()
+        if args.performance_test:
+            disabledStdOut = logging.StreamHandler(stream=None)
+            log.addHandler(disabledStdOut)
 
-    secondaryIps = [
-            ip
-            # '10.42.1.2',
-            # ('127.0.0.1', 57599),
-            # ('localhost', 57823)
-            # '10.0.0.2',
-            # '192.168.100.25'
-            # '192.168.100.25'
-            # '172.22.64.1'
-            # '169.254.254.200'
-        ]
-    tries = 0
-    while not NT_Instance.isConnected():
-        log.debug("Could not connect to team client. Trying other addresses...")
-        NT_Instance.setServer(secondaryIps[tries])
-        tries = tries + 1
+        log.info("Starting AprilTag Spatial Detector")
 
-        if tries >= len(secondaryIps):
-            break
+        self.DISABLE_VIDEO_OUTPUT = args.test
+        self.ENABLE_SOLVEPNP = args.apriltag_pose
+        self.USE_EXTERNAL_IMU = args.imu
 
-    if NT_Instance.isConnected():
-        log.info("NT Connected to {}".format(NT_Instance.getConnections()))
-        return True
-    else:
-        log.error("Could not connect to NetworkTables. Restarting server...")
-        return False
+        self.pipeline, self.pipeline_info = spatialCalculator_pipelines.create_stereoDepth_pipeline()
 
+        self.valid_cameras = None
+        if args.position is not None:
+            self.valid_cameras = constants.CAMERAS[args.p]
 
-def main():
-    global NT_Instance
-    if args.performance_test:
-        disabledStdOut = logging.StreamHandler(stream=None)
-        log.addHandler(disabledStdOut)
+        self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
 
-    log.info("Starting AprilTag Spatial Detector")
+        self.fps = utils.FPSHandler()
 
-    DISABLE_VIDEO_OUTPUT = args.test
-    ENABLE_SOLVEPNP = args.apriltag_pose
-    USE_EXTERNAL_IMU = args.imu
+        self.tag_dictionary = TAG_DICTIONARY
+        self.valid_tags = [t['ID'] for t in self.tag_dictionary['tags']]
 
-    pipeline, pipeline_info = spatialCalculator_pipelines.create_stereoDepth_pipeline()
-
-    detector = robotpy_apriltag.AprilTagDetector()
-    detectorConfig = robotpy_apriltag.AprilTagDetector.Config()
-    detectorConfig.refineEdges = args.refine_edges
-    detectorConfig.quadDecimate = args.quad_decimate
-    detectorConfig.numThreads = args.nthreads
-    detectorConfig.quadSigma = args.quad_sigma
-    detectorConfig.decodeSharpening = args.decode_sharpening
-    detector.setConfig(detectorConfig)
-    detector.addFamily(args.family, 0)
-
-    init_networktables()
-    nt_drivetrain_tab = NT_Instance.getTable("Swerve")
-
-    fps = utils.FPSHandler()
-    latency = np.array([])
-
-    tag_dictionary = TAG_DICTIONARY
-    valid_tags = [t['ID'] for t in TAG_DICTIONARY['tags']]
-
-    with dai.Device(pipeline) as device:
-        log.info("USB SPEED: {}".format(device.getUsbSpeed()))
-        if device.getUsbSpeed() not in [dai.UsbSpeed.SUPER, dai.UsbSpeed.SUPER_PLUS]:
-            log.warning("USB Speed is set to USB 2.0")
-
-        deviceID = device.getMxId()
-        eepromData = device.readCalibration().getEepromData()
-        iMatrix = eepromData.cameraData.get(dai.CameraBoardSocket.RIGHT).intrinsicMatrix
-
-        if deviceID in constants.CAMERA_IDS:
-            productName = constants.CAMERA_IDS[deviceID]['name']
-            ntTableName = constants.CAMERA_IDS[deviceID]['table']
-        else:
-            productName = eepromData.productName
-            ntTableName = 'forward_localizer'
-
-            if len(productName) == 0:
-                boardName = eepromData.boardName
-                if boardName == 'BW1098OBC':
-                    productName = 'OAK-D'
-                    ntTableName = 'forward_localizer'
-                else:
-                    log.warning("Product name could not be determined. Defaulting to OAK-D")
-                    productName = 'OAK-D'
-                    ntTableName = 'forward_localizer'
-
-        nt_depthai_tab = NT_Instance.getTable(ntTableName)
-
-        camera_params = {
-            "hfov": constants.CAMERA_PARAMS[productName]["mono"]["hfov"],
-            "vfov": constants.CAMERA_PARAMS[productName]["mono"]["vfov"],
-            "mount_angle_radians": math.radians(constants.CAMERA_MOUNT_ANGLE),
-            "iMatrix": np.array(iMatrix).reshape(3, 3),
-            # fx, fy, cx, cy
-            "intrinsicValues": (iMatrix[0][0], iMatrix[1][1], iMatrix[0][2], iMatrix[1][2])
-        }
-        detectorIntrinsics = robotpy_apriltag.AprilTagPoseEstimator.Config(
-            constants.TAG_SIZE_M,
-            camera_params['intrinsicValues'][0],
-            camera_params['intrinsicValues'][1],
-            camera_params['intrinsicValues'][2],
-            camera_params['intrinsicValues'][3])
-
-        detectorPoseEstimator = robotpy_apriltag.AprilTagPoseEstimator(detectorIntrinsics)
-
-        # device.setIrLaserDotProjectorBrightness(200)
-        # device.setIrFloodLightBrightness(1500)
-
-        depthQueue = device.getOutputQueue(name=pipeline_info["depthQueue"], maxSize=1, blocking=False)
-        qRight = device.getOutputQueue(name=pipeline_info["monoRightQueue"], maxSize=1, blocking=False)
-        qInputRight = device.getInputQueue(pipeline_info["monoRightCtrlQueue"])
-
-        gyro = None
-        if USE_EXTERNAL_IMU:
+        self.gyro = None
+        if self.USE_EXTERNAL_IMU:
             try:
                 gyro = navX('COM4')
             except Exception as e:
                 log.error("Could not initialize gyro")
 
-        # Precalculate this value to save some performance
-        camera_params["hfl"] = pipeline_info["resolution_x"] / (2 * math.tan(math.radians(camera_params['hfov']) / 2))
-        camera_params["vfl"] = pipeline_info["resolution_y"] / (2 * math.tan(math.radians(camera_params['vfov']) / 2))
+        self.latency = np.array([])
+        self.csCamera = cs.CvSource("de", cs.VideoMode.PixelFormat.kGray, 1280, 720, 60)
 
-        hostSpatials = HostSpatialsCalc(camera_params, tag_dictionary, log)
+        found = False
+        device_info = None
+        while not found:
+            if self.valid_cameras is None:
+                found, device_info = dai.Device.getFirstAvailableDevice()
+            else:
+                for device_id in self.valid_cameras:
+                    found, device_info = dai.Device.getDeviceByMxId(device_id)
+                    if found:
+                        break
 
-        robotAngles = {
-            'pitch': None,
-            'yaw': None
-        }
+            if found:
+                log.info("Goal Camera {} found".format(device_info.getMxId()))
 
-        stats = {
+                self.camera_params = generateCameraParameters(self.pipeline, self.pipeline_info, device_info)
+                self.hostSpatials = HostSpatialsCalc(self.camera_params, self.tag_dictionary, log)
+                self.detector = AprilTagDetector(args, self.camera_params)
+                self.nt_depthai_tab = self.NT_Instance.getTable(self.camera_params['nt_name'])
+                break
+            else:
+                log.error("No Goal Cameras found. Polling again...")
+                sleep(1)
+
+        self.lastMonoFrame = None
+        self.lastDepthFrame = None
+        self.stats = {
             'numTags': 0,
             'depthAI': {
                 'x_pos': [0],
@@ -211,502 +138,327 @@ def main():
             }
         }
 
-        camera_settings = {
-            'manual_exposure_usec': 2000,
-            'manual_exposure_iso': 200,
-            'brightness': 5,
-            'white_balance': 6000
-        }
-        prev_camera_settings = copy.copy(camera_settings)
+        self.run_thread = None
 
-        if not DISABLE_VIDEO_OUTPUT:
-            app = QtWidgets.QApplication(sys.argv)
-            testGui = DebugWindow(gyro, camera_settings, ENABLE_SOLVEPNP)
+        self.camera_settings = None
+        if not self.DISABLE_VIDEO_OUTPUT:
+            from PyQt5 import QtWidgets
+            from designer.debugWindow import  DebugWindow
+            self.app = QtWidgets.QApplication(sys.argv)
+            self.testGui = DebugWindow(self.gyro, self.ENABLE_SOLVEPNP)
+            self.camera_settings = self.testGui.getCameraSettings()
             # app.exec_()
 
-        lastMonoFrame = None
-        lastDepthFrame = None
+    def run(self):
+        log.debug("Setup complete, parsing frames...")
 
-        if DISABLE_VIDEO_OUTPUT:
+        while True:
+            if not self.DISABLE_VIDEO_OUTPUT:
+                found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
+                if found:
+                    self.detect_apriltags(device_info)
+
+                sleep(1)
+            else:
+                if self.run_thread is None or not self.run_thread.is_alive():
+                    found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
+                    self.nt_depthai_tab.putBoolean("Localizer Status", found)
+
+                    if found:
+                        log.info("Goal Camera {} found. Starting processing thread...".format(self.camera_params['id']))
+
+                        self.run_thread = threading.Thread(target=self.detect_apriltags, args=(device_info,))
+                        self.run_thread.daemon = True
+                        self.run_thread.start()
+                    else:
+                        log.error("Goal Camera {} not found. Attempting to restart thread...".format(self.camera_params['id']))
+
+                if self.run_thread is not None and not self.run_thread.is_alive():
+                    log.error("Goal thread died. Restarting thread...")
+            sleep(1)
+
+    def detect_apriltags(self, device):
+        try:
+            for monoFrame, depthFrame, timestampNs in spatialCalculator_pipelines.capture(device, self.camera_settings):
+                self.process_results(monoFrame, depthFrame, timestampNs)
+        except Exception as e:
+            log.error("Exception {}".format(e))
+
+    def process_results(self, monoFrame, depthFrame, timestampNs):
+        self.fps.nextIter()
+        if self.DISABLE_VIDEO_OUTPUT:
             # print("\033[2J", end='')
             pass
 
-        while True:
-            try:
-                inDepth = depthQueue.get()  # blocking call, will wait until a new data has arrived
-                inRight = qRight.get()
-                fps.nextIter()
-            except Exception as e:
-                log.error("Frame not received")
-                continue
-
-            if USE_EXTERNAL_IMU:
-                try:
-                    robotAngles = {
-                        'pitch': math.radians(gyro.get('pitch')),
-                        'yaw': math.radians(gyro.get('yaw'))
-                    }
-                    if not DISABLE_VIDEO_OUTPUT:
-                        testGui.updateYawValue(math.degrees(-robotAngles['yaw']))
-                        testGui.updatePitchValue(math.degrees(robotAngles['pitch']))
-                except Exception as e:
-                    # log.error("Could not grab gyro values")
-                    pass
-            else:
-                robotAngles = {
-                    'pitch': math.radians(nt_drivetrain_tab.getNumber("Pitch_Degrees", 0.0)),
-                    'yaw': math.radians(nt_drivetrain_tab.getNumber("Heading_Degrees", 0.0))
-                }
-
-            depthFrame = inDepth.getFrame()
-            frameRight = inRight.getCvFrame()  # get mono right frame
-
-            if not DISABLE_VIDEO_OUTPUT:
-                ENABLE_SOLVEPNP = testGui.getSolvePnpEnabled()
-
-                if testGui.getPauseResumeState():
-                    depthFrame = lastDepthFrame
-                    frameRight = lastMonoFrame
-
-            tags = detector.detect(frameRight)
-
-            detectedTags = []
-            x_pos = []
-            y_pos = []
-            z_pos = []
-            pnp_tag_id = []
-            pnp_x_pos = []
-            pnp_y_pos = []
-            pnp_z_pos = []
-            pose_id = []
-            if len(tags) > 0:
-                for tag in tags:
-                    if not DISABLE_VIDEO_OUTPUT:
-                        if tag.getId() not in testGui.getTagFilter():
-                            continue
-                    if tag.getId() not in valid_tags:
-                        log.warning("Tag ID {} found, but not defined".format(tag.getId()))
-                        continue
-                    elif tag.getDecisionMargin() < 30:
-                        log.warning("Tag {} found, but not valid".format(tag.getId()))
-                        continue
-                    tagCorners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
-                    xPixels = [p.x for p in tagCorners]
-                    yPixels = [p.y for p in tagCorners]
-                    topLeftXY = (int(min(xPixels)), int(min(yPixels)))
-                    bottomRightXY = (int(max(xPixels)), int(max(yPixels)))
-
-                    roi = (topLeftXY[0], topLeftXY[1], bottomRightXY[0], bottomRightXY[1])
-
-                    robotPose, tagTranslation, spatialData, = hostSpatials.calc_spatials(depthFrame, tag, roi, robotAngles)
-
-                    if robotPose is None:
-                        log.warning("Could not determine robot pose")
-                        continue
-
-                    tagInfo = {
-                        "tag": tag,
-                        "corners": tagCorners,
-                        "XAngle": tagTranslation['x_angle'],
-                        "YAngle": tagTranslation['y_angle'],
-                        "topLeftXY": topLeftXY,
-                        "bottomRightXY": bottomRightXY,
-                        "spatialData": spatialData,
-                        "translation": tagTranslation,
-                        "estimatedRobotPose": robotPose,
-                    }
-                    detectedTags.append(tagInfo)
-                    x_pos.append(robotPose['x'])
-                    y_pos.append(robotPose['y'])
-                    z_pos.append(robotPose['z'])
-                    pose_id.append(tag.getId())
-                    log.info("Tag ID: {}\tCenter: {}\tz: {}".format(tag.getId(), tag.getCenter(), spatialData['z']))
-
-                    # Use this to compare stereoDepth results vs solvePnP
-                    if ENABLE_SOLVEPNP:
-                        tagDictionaryPose = tag_dictionary['tags'][tag.getId()]['pose']['translation']
-                        pnpRobotPose = estimate_robot_pose_with_solvePnP(tag, tagInfo, tagDictionaryPose, camera_params, robotAngles)
-
-                        tagPose = detectorPoseEstimator.estimate(tag)
-
-                        tagInfo['tagPose'] = tagPose
-                        tagInfo['deltaTranslation'] = {
-                            'x': tagPose.x - spatialData['x'],
-                            'y': tagPose.y - spatialData['y'],
-                            'z': tagPose.z - spatialData['z']
-                        }
-
-                        pnp_tag_id.append(tag.getId())
-                        pnp_x_pos.append(pnpRobotPose['x'])
-                        pnp_y_pos.append(pnpRobotPose['y'])
-
-                        log.info("Tag ID: {}\tDelta X: {:.2f}\t"
-                                 "Delta Y: {:.2f}\tDelta Z: {:.2f}".format(tag.getId(),
-                                                                           tagInfo['deltaTranslation']['x'],
-                                                                           tagInfo['deltaTranslation']['y'],
-                                                                           tagInfo['deltaTranslation']['z']))
-
-            fpsValue = fps.fps()
-            latencyMs = (dai.Clock.now() - inDepth.getTimestamp()).total_seconds() * 1000.0
-            latency = np.append(latency, latencyMs)
-            avgLatency = np.average(latency) if len(latency) < 100 else np.average(latency[-100:])
-            latencyStd = np.std(latency) if len(latency) < 100 else np.std(latency[-100:])
-
-            nt_depthai_tab.putNumberArray("tid", pose_id)
-            nt_depthai_tab.putNumberArray("X Poses", x_pos)
-            nt_depthai_tab.putNumberArray("Y Poses", y_pos)
-            nt_depthai_tab.putNumberArray("Z Poses", z_pos)
-
-            # Merge AprilTag measurements to estimate
-            botPose = [np.average(x_pos), np.average(y_pos), np.average(z_pos)]
-            log.info("Estimated Pose X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(botPose[0], botPose[1], botPose[2]))
-            log.info("Std dev X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(np.std(x_pos),
-                                                                      np.std(y_pos),
-                                                                      np.std(z_pos)))
-            nt_depthai_tab.putNumber("Avg X Pose", np.average(x_pos))
-            nt_depthai_tab.putNumber("Avg Y Pose", np.average(y_pos))
-            nt_depthai_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
-            nt_depthai_tab.putNumber("latency", latency[-1])
-
-            nt_depthai_tab.putNumberArray("PnP Pose ID", pnp_tag_id)
-            nt_depthai_tab.putNumberArray("PnP X Poses", pnp_x_pos)
-            nt_depthai_tab.putNumberArray("PnP Y Poses", pnp_y_pos)
-            nt_depthai_tab.putNumberArray("botpose", botPose)
-
-            stats['numTags'] = len(detectedTags)
-            stats['depthAI'] = {
-                'x_pos': x_pos,
-                'y_pos': y_pos,
-                'z_pos': z_pos,
-            }
-            stats['solvePnP'] = {
-                'x_pos': pnp_x_pos,
-                'y_pos': pnp_y_pos,
-                'z_pos': [0]
-            }
-
-            if not DISABLE_VIDEO_OUTPUT:
-                for detectedTag in detectedTags:
-                    points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
-                    # Shift points since this is a snapshot
-                    cv2.polylines(frameRight, [points], True, (120, 120, 120), 3)
-                    textX = min(points[:, 0])
-                    textY = min(points[:, 1]) + 20
-                    cv2.putText(frameRight, "tag_id: {}".format(detectedTag['tag'].getId()),
-                                (textX, textY), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-
-                    if ENABLE_SOLVEPNP:
-                        r_vec = np.array([detectedTag['tagPose'].rotation().x,
-                                          detectedTag['tagPose'].rotation().y,
-                                          detectedTag['tagPose'].rotation().z])
-                        t_vec = np.array([detectedTag['tagPose'].translation().x,
-                                          detectedTag['tagPose'].translation().y,
-                                          detectedTag['tagPose'].translation().z])
-                        ipoints, _ = cv2.projectPoints(constants.OPOINTS,
-                                                       r_vec,
-                                                       t_vec,
-                                                       camera_params['iMatrix'],
-                                                       np.zeros(5))
-
-                        ipoints = np.round(ipoints).astype(int)
-
-                        ipoints = [tuple(pt) for pt in ipoints.reshape(-1, 2)]
-
-                        for i, j in constants.EDGES:
-                            cv2.line(frameRight, ipoints[i], ipoints[j], (0, 255, 0), 1, 16)
-
-                    cv2.putText(frameRight, "x: {:.2f}".format(detectedTag["spatialData"]['x']),
-                                (textX, textY + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                    cv2.putText(frameRight, "y: {:.2f}".format(detectedTag["spatialData"]['y']),
-                                (textX, textY + 40), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                    cv2.putText(frameRight, "x angle: {:.2f}".format(detectedTag["translation"]['x_angle']),
-                                (textX, textY + 60), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                    cv2.putText(frameRight, "y angle: {:.2f}".format(detectedTag["translation"]['y_angle']),
-                                (textX, textY + 80), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                    cv2.putText(frameRight, "z: {:.2f}".format(detectedTag["spatialData"]['z']),
-                                (textX, textY + 100), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                    cv2.rectangle(frameRight, detectedTag["topLeftXY"], detectedTag["bottomRightXY"],
-                                  (0, 0, 0), 3)
-
-                if not testGui.getPauseResumeState():
-                    cv2.circle(frameRight, (int(frameRight.shape[1]/2), int(frameRight.shape[0]/2)), 1, (255, 255, 255), 1)
-                    cv2.putText(frameRight, "FPS: {:.2f}".format(fpsValue), (0, 24), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
-                    cv2.putText(frameRight, "Latency: {:.2f}ms".format(avgLatency), (0, 50), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
-
-                    depthFrameColor = cv2.normalize(depthFrame, None, 255, 0, cv2.NORM_INF, cv2.CV_8UC1)
-                    depthFrameColor = cv2.equalizeHist(depthFrameColor)
-                    depthFrameColor = cv2.applyColorMap(depthFrameColor, cv2.COLORMAP_HOT)
-
-                    # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
-                    # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
-                    testGui.updateTagIds(pose_id)
-                    testGui.updateStatsValue(stats)
-                    testGui.updateFrames(frameRight, depthFrameColor)
-            else:
-                print('FPS: {:.2f}\tLatency: {:.2f} ms\tStd: {:.2f}'.format(fpsValue, avgLatency, latencyStd))
-                print('DepthAI')
-                print('Tags: {}'.format(pose_id))
-                print("         Avg.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(x_pos), np.average(y_pos), np.average(z_pos)))
-                print("         Std.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(x_pos), np.average(y_pos), np.average(z_pos)))
-                # print("\033[2J", end='')
-
-            lastMonoFrame = copy.copy(frameRight)
-            lastDepthFrame = copy.copy(depthFrame)
-
-            # Camera control
-            if not DISABLE_VIDEO_OUTPUT:
-                camera_settings = testGui.getCameraSettings()
-
-            if prev_camera_settings != camera_settings:
-                ctrl = dai.CameraControl()
-                ctrl.setManualExposure(camera_settings['manual_exposure_usec'], camera_settings['manual_exposure_iso'])
-                ctrl.setAutoWhiteBalanceMode(dai.CameraControl.AutoWhiteBalanceMode.OFF)
-                ctrl.setManualWhiteBalance(camera_settings['white_balance'])
-                ctrl.setBrightness(camera_settings['brightness'])
-                qInputRight.send(ctrl)
-                prev_camera_settings = copy.copy(camera_settings)
-
-            key = cv2.waitKey(1)
-            if key == ord('q'):
-                break
-            elif key == ord(' '):
-                if 'gyro' in locals():
-                    gyro.resetAll()
-
-            if not DISABLE_VIDEO_OUTPUT:
-                if not testGui.isVisible():
-                    break
-
-
-class DebugWindow(QtWidgets.QWidget):
-    def __init__(self, gyro, camera_settings, solvePnp=False):
-        super(DebugWindow, self).__init__()
-        uic.loadUi('designer/debugWindow.ui', self)
-        self.tagFilter = list(range(1, 9))
-        self.tagCheckbox1.stateChanged.connect(lambda: self.updateTagFilter())
-        self.tagCheckbox2.stateChanged.connect(lambda: self.updateTagFilter())
-        self.tagCheckbox3.stateChanged.connect(lambda: self.updateTagFilter())
-        self.tagCheckbox4.stateChanged.connect(lambda: self.updateTagFilter())
-        self.tagCheckbox5.stateChanged.connect(lambda: self.updateTagFilter())
-        self.tagCheckbox6.stateChanged.connect(lambda: self.updateTagFilter())
-        self.tagCheckbox7.stateChanged.connect(lambda: self.updateTagFilter())
-        self.tagCheckbox8.stateChanged.connect(lambda: self.updateTagFilter())
-
-        self.gyro = gyro
         if self.gyro is not None:
-            self.resetGyroBtn.clicked.connect(lambda: self.resetGyroButtonPressed(self.gyro))
+            try:
+                robotAngles = {
+                    'pitch': math.radians(self.gyro.get('pitch')),
+                    'yaw': math.radians(self.gyro.get('yaw'))
+                }
+                if not self.DISABLE_VIDEO_OUTPUT:
+                    self.testGui.updateYawValue(math.degrees(-robotAngles['yaw']))
+                    self.testGui.updatePitchValue(math.degrees(robotAngles['pitch']))
+            except Exception as e:
+                # log.error("Could not grab gyro values")
+                pass
         else:
-            self.resetGyroBtn.setEnabled(False)
-            self.yawValue.setEnabled(False)
-            self.pitchValue.setEnabled(False)
+            robotAngles = {
+                'pitch': math.radians(self.nt_drivetrain_tab.getNumber("Pitch_Degrees", 0.0)),
+                'yaw': math.radians(self.nt_drivetrain_tab.getNumber("Heading_Degrees", 0.0))
+            }
 
-        self.values = None
-        self.unitsButtonGroup.buttonClicked.connect(lambda: self.updateUnits())
-        self.unitScale = 1.0
+        if not self.DISABLE_VIDEO_OUTPUT:
+            self.ENABLE_SOLVEPNP = self.testGui.getSolvePnpEnabled()
 
-        self.solvePnp = solvePnp
-        self.solvePnpEnableBtn.setChecked(self.solvePnp)
-        self.solvePnpEnableBtn.clicked.connect(lambda: self.toggleSolvePnp())
+            if self.testGui.getPauseResumeState():
+                depthFrame = self.lastDepthFrame
+                monoFrame = self.lastMonoFrame
 
-        self.camera_settings = camera_settings
-        self.initializeCameraSettings()
-        self.lockCameraUpdates = False
+        tags = self.detector.detect(monoFrame)
 
-        self.exposureTimeSlider.valueChanged.connect(lambda: self.updateCameraSettings(True))
-        # self.exposureTimeValue.textChanged.connect(lambda: self.updateCameraSettings(False))
-        self.exposureIsoSlider.valueChanged.connect(lambda: self.updateCameraSettings(True))
-        # self.exposureIsoValue.textChanged.connect(lambda: self.updateCameraSettings(False))
-        self.brightnessSlider.valueChanged.connect(lambda: self.updateCameraSettings(True))
-        # self.brightnessValue.textChanged.connect(lambda: self.updateCameraSettings(False))
-        self.whiteBalanceSlider.valueChanged.connect(lambda: self.updateCameraSettings(True))
-        # self.whiteBalanceValue.textChanged.connect(lambda: self.updateCameraSettings(False))
+        detectedTags = []
+        x_pos = []
+        y_pos = []
+        z_pos = []
+        pnp_tag_id = []
+        pnp_x_pos = []
+        pnp_y_pos = []
+        pnp_z_pos = []
+        pose_id = []
+        if len(tags) > 0:
+            for tag in tags:
+                if not self.DISABLE_VIDEO_OUTPUT:
+                    if tag.getId() not in self.testGui.getTagFilter():
+                        continue
+                if tag.getId() not in self.valid_tags:
+                    log.warning("Tag ID {} found, but not defined".format(tag.getId()))
+                    continue
+                elif tag.getDecisionMargin() < 30:
+                    log.warning("Tag {} found, but not valid".format(tag.getId()))
+                    continue
+                tagCorners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
+                xPixels = [p.x for p in tagCorners]
+                yPixels = [p.y for p in tagCorners]
+                topLeftXY = (int(min(xPixels)), int(min(yPixels)))
+                bottomRightXY = (int(max(xPixels)), int(max(yPixels)))
 
-        self.pauseResumeBtn.clicked.connect(lambda: self.pauseResumeButtonPressed())
-        self.pause = False
-        self.show()
+                roi = (topLeftXY[0], topLeftXY[1], bottomRightXY[0], bottomRightXY[1])
 
-    def updateYawValue(self, value):
-        self.yawValue.setText("{:.06f}".format(value))
+                robotPose, tagTranslation, spatialData, = self.hostSpatials.calc_spatials(depthFrame, tag, roi, robotAngles)
 
-    def updatePitchValue(self, value):
-        self.pitchValue.setText("{:.06f}".format(value))
+                if robotPose is None:
+                    log.warning("Could not determine robot pose")
+                    continue
 
-    def updateTagIds(self, tagIds):
-        if len(tagIds) > 0:
-            self.detectedTagsValue.setText("{}".format(tagIds))
+                tagInfo = {
+                    "tag": tag,
+                    "corners": tagCorners,
+                    "XAngle": tagTranslation['x_angle'],
+                    "YAngle": tagTranslation['y_angle'],
+                    "topLeftXY": topLeftXY,
+                    "bottomRightXY": bottomRightXY,
+                    "spatialData": spatialData,
+                    "translation": tagTranslation,
+                    "estimatedRobotPose": robotPose,
+                }
+                detectedTags.append(tagInfo)
+                x_pos.append(robotPose['x'])
+                y_pos.append(robotPose['y'])
+                z_pos.append(robotPose['z'])
+                pose_id.append(tag.getId())
+                log.info("Tag ID: {}\tCenter: {}\tz: {}".format(tag.getId(), tag.getCenter(), spatialData['z']))
+
+                # Use this to compare stereoDepth results vs solvePnP
+                if self.ENABLE_SOLVEPNP:
+                    tagDictionaryPose = self.tag_dictionary['tags'][tag.getId()]['pose']['translation']
+                    pnpRobotPose = estimate_robot_pose_with_solvePnP(tag, tagInfo, tagDictionaryPose, self.camera_params, robotAngles)
+
+                    tagPose = self.detector.estimatePose(tag)
+
+                    tagInfo['tagPose'] = tagPose
+                    tagInfo['deltaTranslation'] = {
+                        'x': tagPose.x - spatialData['x'],
+                        'y': tagPose.y - spatialData['y'],
+                        'z': tagPose.z - spatialData['z']
+                    }
+
+                    pnp_tag_id.append(tag.getId())
+                    pnp_x_pos.append(pnpRobotPose['x'])
+                    pnp_y_pos.append(pnpRobotPose['y'])
+
+                    log.info("Tag ID: {}\tDelta X: {:.2f}\t"
+                             "Delta Y: {:.2f}\tDelta Z: {:.2f}".format(tag.getId(),
+                                                                       tagInfo['deltaTranslation']['x'],
+                                                                       tagInfo['deltaTranslation']['y'],
+                                                                       tagInfo['deltaTranslation']['z']))
+
+        fpsValue = self.fps.fps()
+        latencyMs = (dai.Clock.now() - timestampNs).total_seconds() * 1000.0
+        self.latency = np.append(self.latency, latencyMs)
+        avgLatency = np.average(self.latency) if len(self.latency) < 100 else np.average(self.latency[-100:])
+        latencyStd = np.std(self.latency) if len(self.latency) < 100 else np.std(self.latency[-100:])
+
+        self.nt_depthai_tab.putNumberArray("tid", pose_id)
+        self.nt_depthai_tab.putNumberArray("X Poses", x_pos)
+        self.nt_depthai_tab.putNumberArray("Y Poses", y_pos)
+        self.nt_depthai_tab.putNumberArray("Z Poses", z_pos)
+
+        # Merge AprilTag measurements to estimate
+        botPose = [np.average(x_pos), np.average(y_pos), np.average(z_pos)]
+        log.info("Estimated Pose X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(botPose[0], botPose[1], botPose[2]))
+        log.info("Std dev X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(np.std(x_pos),
+                                                                  np.std(y_pos),
+                                                                  np.std(z_pos)))
+        self.nt_depthai_tab.putNumber("Avg X Pose", np.average(x_pos))
+        self.nt_depthai_tab.putNumber("Avg Y Pose", np.average(y_pos))
+        self.nt_depthai_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
+        self.nt_depthai_tab.putNumber("latency", self.latency[-1])
+
+        self.nt_depthai_tab.putNumberArray("PnP Pose ID", pnp_tag_id)
+        self.nt_depthai_tab.putNumberArray("PnP X Poses", pnp_x_pos)
+        self.nt_depthai_tab.putNumberArray("PnP Y Poses", pnp_y_pos)
+        self.nt_depthai_tab.putNumberArray("botpose", botPose)
+
+        self.stats['numTags'] = len(detectedTags)
+        self.stats['depthAI'] = {
+            'x_pos': x_pos,
+            'y_pos': y_pos,
+            'z_pos': z_pos,
+        }
+        self.stats['solvePnP'] = {
+            'x_pos': pnp_x_pos,
+            'y_pos': pnp_y_pos,
+            'z_pos': [0]
+        }
+
+        if not self.DISABLE_VIDEO_OUTPUT:
+            for detectedTag in detectedTags:
+                points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
+                # Shift points since this is a snapshot
+                cv2.polylines(monoFrame, [points], True, (120, 120, 120), 3)
+                textX = min(points[:, 0])
+                textY = min(points[:, 1]) + 20
+                cv2.putText(monoFrame, "tag_id: {}".format(detectedTag['tag'].getId()),
+                            (textX, textY), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
+
+                if self.ENABLE_SOLVEPNP:
+                    r_vec = np.array([detectedTag['tagPose'].rotation().x,
+                                      detectedTag['tagPose'].rotation().y,
+                                      detectedTag['tagPose'].rotation().z])
+                    t_vec = np.array([detectedTag['tagPose'].translation().x,
+                                      detectedTag['tagPose'].translation().y,
+                                      detectedTag['tagPose'].translation().z])
+                    ipoints, _ = cv2.projectPoints(constants.OPOINTS,
+                                                   r_vec,
+                                                   t_vec,
+                                                   self.camera_params['iMatrix'],
+                                                   np.zeros(5))
+
+                    ipoints = np.round(ipoints).astype(int)
+
+                    ipoints = [tuple(pt) for pt in ipoints.reshape(-1, 2)]
+
+                    for i, j in constants.EDGES:
+                        cv2.line(monoFrame, ipoints[i], ipoints[j], (0, 255, 0), 1, 16)
+
+                cv2.putText(monoFrame, "x: {:.2f}".format(detectedTag["spatialData"]['x']),
+                            (textX, textY + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
+                cv2.putText(monoFrame, "y: {:.2f}".format(detectedTag["spatialData"]['y']),
+                            (textX, textY + 40), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
+                cv2.putText(monoFrame, "x angle: {:.2f}".format(detectedTag["translation"]['x_angle']),
+                            (textX, textY + 60), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
+                cv2.putText(monoFrame, "y angle: {:.2f}".format(detectedTag["translation"]['y_angle']),
+                            (textX, textY + 80), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
+                cv2.putText(monoFrame, "z: {:.2f}".format(detectedTag["spatialData"]['z']),
+                            (textX, textY + 100), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
+                cv2.rectangle(monoFrame, detectedTag["topLeftXY"], detectedTag["bottomRightXY"],
+                              (0, 0, 0), 3)
+
+            if not self.testGui.getPauseResumeState():
+                cv2.circle(monoFrame, (int(monoFrame.shape[1]/2), int(monoFrame.shape[0]/2)), 1, (255, 255, 255), 1)
+                cv2.putText(monoFrame, "FPS: {:.2f}".format(fpsValue), (0, 24), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
+                cv2.putText(monoFrame, "Latency: {:.2f}ms".format(avgLatency), (0, 50), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
+
+                depthFrameColor = cv2.normalize(depthFrame, None, 255, 0, cv2.NORM_INF, cv2.CV_8UC1)
+                depthFrameColor = cv2.equalizeHist(depthFrameColor)
+                depthFrameColor = cv2.applyColorMap(depthFrameColor, cv2.COLORMAP_HOT)
+
+                # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
+                # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
+                self.testGui.updateTagIds(pose_id)
+                if len(detectedTags) > 0:
+                    self.testGui.updateStatsValue(self.stats)
+                self.testGui.updateFrames(monoFrame, depthFrameColor)
         else:
-            self.detectedTagsValue.setText('')
+            print('FPS: {:.2f}\tLatency: {:.2f} ms\tStd: {:.2f}'.format(fpsValue, avgLatency, latencyStd))
+            print('DepthAI')
+            print('Tags: {}'.format(pose_id))
+            print("         Avg.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(x_pos), np.average(y_pos), np.average(z_pos)))
+            print("         Std.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(x_pos), np.average(y_pos), np.average(z_pos)))
+            # print("\033[2J", end='')
 
-    def updateStatsValue(self, values=None):
-        if values is None:
-            values = self.values
+        self.lastMonoFrame = copy.copy(monoFrame)
+        self.lastDepthFrame = copy.copy(depthFrame)
 
-        self.avgDepthXValue.setText("{:.04f}".format(np.average(values['depthAI']['x_pos']) * self.unitScale))
-        self.avgDepthYValue.setText("{:.04f}".format(np.average(values['depthAI']['y_pos']) * self.unitScale))
-        self.avgDepthZValue.setText("{:.04f}".format(np.average(values['depthAI']['z_pos']) * self.unitScale))
-        self.stdDepthXValue.setText("{:.04f}".format(np.std(values['depthAI']['x_pos']) * self.unitScale))
-        self.stdDepthYValue.setText("{:.04f}".format(np.std(values['depthAI']['y_pos']) * self.unitScale))
-        self.stdDepthZValue.setText("{:.04f}".format(np.std(values['depthAI']['z_pos']) * self.unitScale))
+        key = cv2.waitKey(1)
+        if key == ord('q'):
+            raise StopIteration()
+        elif key == ord(' '):
+            if self.gyro is not None:
+                self.gyro.resetAll()
 
-        self.avgPnpXValue.setText("{:.04f}".format(np.average(values['solvePnP']['x_pos']) * self.unitScale))
-        self.avgPnpYValue.setText("{:.04f}".format(np.average(values['solvePnP']['y_pos']) * self.unitScale))
-        self.avgPnpZValue.setText("{:.04f}".format(np.average(values['solvePnP']['z_pos']) * self.unitScale))
-        self.stdPnpXValue.setText("{:.04f}".format(np.std(values['solvePnP']['x_pos']) * self.unitScale))
-        self.stdPnpYValue.setText("{:.04f}".format(np.std(values['solvePnP']['y_pos']) * self.unitScale))
-        self.stdPnpZValue.setText("{:.04f}".format(np.std(values['solvePnP']['z_pos']) * self.unitScale))
-        self.values = values
+        if not self.DISABLE_VIDEO_OUTPUT:
+            if not self.testGui.isVisible():
+                pass
 
-    def updateFrames(self, monoFrame, depthFrame):
-        activeTab = self.frameWidget.currentIndex()
+    def init_networktables(self):
+        NT_Instance = NetworkTableInstance.getDefault()
+        identity = basename(__file__)
+        NT_Instance.startClient4(identity)
+        NT_Instance.setServer("10.42.1.2")
+        hostname = socket.gethostname()
+        ip = socket.gethostbyname(hostname)
 
-        if activeTab == 0:
-            monoFrame = cv2.cvtColor(monoFrame, cv2.COLOR_GRAY2RGB)
-            img = QtGui.QImage(monoFrame, monoFrame.shape[1], monoFrame.shape[0], QtGui.QImage.Format_RGB888)
-            pix = QtGui.QPixmap.fromImage(img)
-            self.monoFrame.setMinimumWidth(monoFrame.shape[1])
-            self.monoFrame.setMinimumHeight(monoFrame.shape[0])
-            self.monoFrame.setMaximumWidth(monoFrame.shape[1])
-            self.monoFrame.setMaximumHeight(monoFrame.shape[0])
-            self.monoFrame.setPixmap(pix)
-        elif activeTab == 1:
-            depthFrame = cv2.cvtColor(depthFrame, cv2.COLOR_BGR2RGB)
-            img = QtGui.QImage(depthFrame, depthFrame.shape[1], depthFrame.shape[0], QtGui.QImage.Format_RGB888)
-            pix = QtGui.QPixmap.fromImage(img)
-            self.depthFrame.setMinimumWidth(depthFrame.shape[1])
-            self.depthFrame.setMinimumHeight(depthFrame.shape[0])
-            self.depthFrame.setMaximumWidth(depthFrame.shape[1])
-            self.depthFrame.setMaximumHeight(depthFrame.shape[0])
-            self.depthFrame.setPixmap(pix)
-        elif activeTab == 2:
-            monoFrame = cv2.cvtColor(monoFrame, cv2.COLOR_GRAY2RGB)
-            img = QtGui.QImage(monoFrame, monoFrame.shape[1], monoFrame.shape[0], QtGui.QImage.Format_RGB888)
-            pix = QtGui.QPixmap.fromImage(img)
-            self.monoFrame2.setMinimumWidth(monoFrame.shape[1])
-            self.monoFrame2.setMinimumHeight(monoFrame.shape[0])
-            self.monoFrame2.setMaximumWidth(monoFrame.shape[1])
-            self.monoFrame2.setMaximumHeight(monoFrame.shape[0])
-            self.monoFrame2.setPixmap(pix)
+        secondaryIps = [
+                ip
+                # '10.42.1.2',
+                # ('127.0.0.1', 57599),
+                # ('localhost', 57823)
+                # '10.0.0.2',
+                # '192.168.100.25'
+                # '192.168.100.25'
+                # '172.22.64.1'
+                # '169.254.254.200'
+            ]
+        tries = 0
+        while not NT_Instance.isConnected():
+            log.debug("Could not connect to team client. Trying other addresses...")
+            NT_Instance.setServer(secondaryIps[tries])
+            tries = tries + 1
 
-            depthFrame = cv2.cvtColor(depthFrame, cv2.COLOR_BGR2RGB)
-            img = QtGui.QImage(depthFrame, depthFrame.shape[1], depthFrame.shape[0], QtGui.QImage.Format_RGB888)
-            pix = QtGui.QPixmap.fromImage(img)
-            self.depthFrame2.setMinimumWidth(depthFrame.shape[1])
-            self.depthFrame2.setMinimumHeight(depthFrame.shape[0])
-            self.depthFrame2.setMaximumWidth(depthFrame.shape[1])
-            self.depthFrame2.setMaximumHeight(depthFrame.shape[0])
-            self.depthFrame2.setPixmap(pix)
+            if tries >= len(secondaryIps):
+                break
 
-    def updateUnits(self):
-        if self.unitsButtonGroup.checkedId() == -2:
-            self.unitScale = 1.0
-        elif self.unitsButtonGroup.checkedId() == -3:
-            self.unitScale = 3.28084
-        elif self.unitsButtonGroup.checkedId() == -4:
-            self.unitScale = 39.3701
-
-        self.updateStatsValue()
-
-    def updateTagFilter(self):
-        filter = np.array(np.where([self.tagCheckbox1.isChecked(), self.tagCheckbox2.isChecked(),
-                                    self.tagCheckbox3.isChecked(), self.tagCheckbox4.isChecked(),
-                                    self.tagCheckbox5.isChecked(), self.tagCheckbox6.isChecked(),
-                                    self.tagCheckbox7.isChecked(), self.tagCheckbox8.isChecked()])) + 1
-
-        self.tagFilter = filter.tolist()
-
-    def getTagFilter(self):
-        return self.tagFilter
-
-    def resetGyroButtonPressed(self, gyro):
-        if gyro is not None:
-            gyro.resetAll()
-
-    def toggleSolvePnp(self):
-        self.solvePnp = self.solvePnpEnableBtn.isChecked()
-
-    def getSolvePnpEnabled(self):
-        return self.solvePnp
-
-    def pauseResumeButtonPressed(self):
-        if self.pause:
-            self.pause = False
-            self.pauseResumeBtn.setText("Pause")
+        if NT_Instance.isConnected():
+            log.info("NT Connected to {}".format(NT_Instance.getConnections()))
         else:
-            self.pause = True
-            self.pauseResumeBtn.setText("Resume")
+            log.error("Could not connect to NetworkTables. Restarting server...")
 
-    def getPauseResumeState(self):
-        return self.pause
+        return NT_Instance
 
-    def initializeCameraSettings(self):
-        # Exposure time (microseconds)
-        self.exposureTimeLabel.setToolTip("Min: 0, Max 10000")
-        self.exposureTimeSlider.setMinimum(0)
-        self.exposureTimeSlider.setMaximum(10000)
-        self.exposureTimeSlider.setValue(self.camera_settings['manual_exposure_usec'])
-        self.exposureTimeValue.setText(self.camera_settings['manual_exposure_usec'].__str__())
-        exposureTimeRange = QIntValidator()
-        exposureTimeRange.setRange(0, 10000)
-        self.exposureTimeValue.setValidator(exposureTimeRange)
+    def _csCoreThread(self):
+        cap = cv2.VideoCapture(0)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
-        # Exposure ISO Sensitivity (100, 1600)
-        self.exposureIsoLabel.setToolTip("Min: 100, Max 1600")
-        self.exposureIsoSlider.setMinimum(100)
-        self.exposureIsoSlider.setMaximum(1600)
-        self.exposureIsoSlider.setValue(self.camera_settings['manual_exposure_iso'])
-        self.exposureIsoValue.setText(self.camera_settings['manual_exposure_iso'].__str__())
-        exposureIsoRange = QIntValidator()
-        exposureIsoRange.setRange(100, 1600)
-        self.exposureIsoValue.setValidator(exposureIsoRange)
-
-        # Temperature in Kelvins (1000, 12000)
-        self.whiteBalanceLabel.setToolTip("Min: 1000, Max 12000")
-        self.whiteBalanceSlider.setMinimum(1000)
-        self.whiteBalanceSlider.setMaximum(12000)
-        self.whiteBalanceSlider.setValue(self.camera_settings['white_balance'])
-        self.whiteBalanceValue.setText(self.camera_settings['white_balance'].__str__())
-        whiteBalanceRange = QIntValidator()
-        whiteBalanceRange.setRange(1000, 12000)
-        self.whiteBalanceValue.setValidator(whiteBalanceRange)
-
-        # Image Brightness (-10, 10)
-        self.brightnessLabel.setToolTip("Min: -10, Max 10")
-        self.brightnessSlider.setMinimum(-10)
-        self.brightnessSlider.setMaximum(10)
-        self.brightnessSlider.setValue(self.camera_settings['brightness'])
-        self.brightnessValue.setText(self.camera_settings['brightness'].__str__())
-        brightnessRange = QIntValidator()
-        brightnessRange.setRange(-10, 10)
-        self.brightnessValue.setValidator(brightnessRange)
-
-    def updateCameraSettings(self, slider):
-        # if not self.lockCameraUpdates:
-        #     self.lockCameraUpdates = True
-            if slider:
-                self.exposureTimeValue.setText(self.exposureTimeSlider.value().__str__())
-                self.exposureIsoValue.setText(self.exposureIsoSlider.value().__str__())
-                self.whiteBalanceValue.setText(self.whiteBalanceSlider.value().__str__())
-                self.brightnessValue.setText(self.brightnessSlider.value().__str__())
-            else:
-                try:
-                    self.exposureTimeSlider.setValue(int(self.exposureTimeValue.text()))
-                    self.exposureIsoSlider.setValue(int(self.exposureIsoValue.text()))
-                    self.whiteBalanceSlider.setValue(int(self.whiteBalanceValue.text()))
-                    self.brightnessSlider.setValue(int(self.brightnessValue.text()))
-                except Exception as e:
-                    self.lockCameraUpdates = False
-                    return
-
-            self.camera_settings['manual_exposure_usec'] = int(self.exposureTimeValue.text())
-            self.camera_settings['manual_exposure_iso'] = int(self.exposureIsoValue.text())
-            self.camera_settings['white_balance'] = int(self.whiteBalanceValue.text())
-            self.camera_settings['brightness'] = int(self.brightnessValue.text())
-        # else:
-        #     self.lockCameraUpdates = False
-
-    def getCameraSettings(self):
-        return self.camera_settings
+        img = None
+        while True:
+            retval, img = cap.read(img)
+            if retval:
+                self.csCamera.putFrame(img)
 
 
 if __name__ == '__main__':
-    main()
+    log.info("Starting LocalizerHost")
+    LocalizationHost().run()

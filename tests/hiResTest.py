@@ -62,8 +62,8 @@ def main():
         eepromData = device.readCalibration().getEepromData()
         iMatrix = eepromData.cameraData.get(dai.CameraBoardSocket.RIGHT).intrinsicMatrix
 
-        if deviceID in constants.CAMERA_IDS:
-            productName = constants.CAMERA_IDS[deviceID]['name']
+        if deviceID in constants.CAMERAS:
+            productName = constants.CAMERAS[deviceID]['name']
         else:
             productName = eepromData.productName
 

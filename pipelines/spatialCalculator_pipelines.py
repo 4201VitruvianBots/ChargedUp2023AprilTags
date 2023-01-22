@@ -1,8 +1,17 @@
+import copy
+import logging
 
 import depthai as dai
 
+from common import constants
+
+log = logging.getLogger(__name__)
+
 
 def create_stereoDepth_pipeline(enable_recording=False):
+    global pipeline
+    global pipeline_info
+
     # Start defining a pipeline
     pipeline = dai.Pipeline()
 
@@ -159,3 +168,39 @@ def create_spatialCalculator_pipeline():
     }
 
     return pipeline, pipeline_info
+
+
+def capture(device_info, camera_settings=None):
+    with dai.Device(pipeline, device_info) as device:
+        # device.setIrLaserDotProjectorBrightness(200)
+        # device.setIrFloodLightBrightness(1500)
+
+        depthQueue = device.getOutputQueue(name=pipeline_info["depthQueue"], maxSize=1, blocking=False)
+        qRight = device.getOutputQueue(name=pipeline_info["monoRightQueue"], maxSize=1, blocking=False)
+        qInputRight = device.getInputQueue(pipeline_info["monoRightCtrlQueue"])
+
+        if camera_settings is not None:
+            prev_camera_settings = copy.copy(camera_settings)
+        while True:
+            try:
+                inDepth = depthQueue.get()  # blocking call, will wait until a new data has arrived
+                inRight = qRight.get()
+            except Exception as e:
+                log.error("Frame not received")
+                continue
+
+            depthFrame = inDepth.getFrame()
+            frameRight = inRight.getCvFrame()  # get mono right frame
+            timestampNs = inRight.getTimestamp()
+
+            if camera_settings is not None:
+                if prev_camera_settings != camera_settings:
+                    ctrl = dai.CameraControl()
+                    ctrl.setManualExposure(camera_settings['manual_exposure_usec'], camera_settings['manual_exposure_iso'])
+                    ctrl.setAutoWhiteBalanceMode(dai.CameraControl.AutoWhiteBalanceMode.OFF)
+                    ctrl.setManualWhiteBalance(camera_settings['white_balance'])
+                    ctrl.setBrightness(camera_settings['brightness'])
+                    qInputRight.send(ctrl)
+                    prev_camera_settings = copy.copy(camera_settings)
+
+            yield frameRight, depthFrame, timestampNs

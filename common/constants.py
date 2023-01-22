@@ -4,30 +4,31 @@ import numpy as np
 TAG_SIZE_M = 0.1524
 PADDING_PERCENTAGE = 0.31
 
-CAMERA_MOUNT_ANGLE = 0.0
-CAMERA_MOUNT_HEIGHT = 0.0
+CAMERAS = {
+    'Forward_Localizers': {
+        # X, Y Z
+        'mount_offset': [0, 0, 0],
+        # pitch, roll, yaw
+        'mount_angle': [0, 0, 0],
+        'nt_name': 'depthai-f',
+        'ids': {
+            '14442C10218CCCD200': 'OAK-D',
+            '18443010B1FA0C1300': 'OAK-D Lite',
+            '18443010110CC71200': 'OAK-D Pro W',
+            '1944301061F9721300': 'OAK-D Lite',
 
-CAMERA_IDS = {
-    '14442C10218CCCD200': {
-        'name': 'OAK-D',
-        'table': 'forward_localizer',
+        }
     },
-    '18443010B1FA0C1300': {
-        'name': 'OAK-D Lite',
-        'table': 'forward_localizer',
-    },
-    '18443010110CC71200': {
-        'name': 'OAK-D Pro W',
-        'table': 'forward_localizer',
-    },
-    '1944301061F9721300': {
-        'name': 'OAK-D Pro W PoE',
-        'table': 'forward_localizer',
-    },
-    '1944301061F9721301': {
-        'name': 'OAK-D Pro W PoE',
-        'table': 'rear_localizer',
-    },
+    'Rear_Localizers': {
+        # X, Y Z
+        'mount_offset': [0, 0, 0],
+        # pitch, roll, yaw
+        'mount_angle': [0, 0, 0],
+        'nt_name': 'depthai-r',
+        'ids': {
+            '1944301061F9721301': 'OAK-D Pro W PoE'
+        }
+    }
 }
 
 CAMERA_PARAMS = {
