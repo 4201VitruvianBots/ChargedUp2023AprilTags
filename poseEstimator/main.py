@@ -19,6 +19,7 @@ from ntcore import NetworkTableInstance
 from aprilTags.apriltagDetector import AprilTagDetector
 from common import constants
 from common import utils
+from common.cscoreServer import CSCoreServer
 from common.depthaiUtils import generateCameraParameters
 from common.imu import navX
 from common.tag_dictionary import TAG_DICTIONARY
@@ -97,7 +98,6 @@ class LocalizationHost:
                 log.error("Could not initialize gyro")
 
         self.latency = np.array([])
-        self.csCamera = cs.CvSource("de", cs.VideoMode.PixelFormat.kGray, 1280, 720, 60)
 
         found = False
         device_info = None
@@ -122,6 +122,7 @@ class LocalizationHost:
                 log.error("No Cameras found. Polling again...")
                 sleep(1)
 
+        self.camera_stream = CSCoreServer(self.camera_params['device_name'])
         self.lastMonoFrame = None
         self.lastDepthFrame = None
         self.stats = {
@@ -143,7 +144,7 @@ class LocalizationHost:
         self.camera_settings = None
         if not self.DISABLE_VIDEO_OUTPUT:
             from PyQt5 import QtWidgets
-            from designer.debugWindow import  DebugWindow
+            from designer.debugWindow import DebugWindow
             self.app = QtWidgets.QApplication(sys.argv)
             self.testGui = DebugWindow(self.gyro, self.ENABLE_SOLVEPNP)
             self.camera_settings = self.testGui.getCameraSettings()
@@ -151,31 +152,35 @@ class LocalizationHost:
 
     def run(self):
         log.debug("Setup complete, parsing frames...")
-
-        while True:
-            if not self.DISABLE_VIDEO_OUTPUT:
-                found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
-                if found:
-                    self.detect_apriltags(device_info)
-
-                sleep(1)
-            else:
-                if self.run_thread is None or not self.run_thread.is_alive():
+        try:
+            while True:
+                if not self.DISABLE_VIDEO_OUTPUT:
                     found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
-                    self.nt_depthai_tab.putBoolean("Localizer Status", found)
-
                     if found:
-                        log.info("Camera {} found. Starting processing thread...".format(self.camera_params['id']))
+                        self.detect_apriltags(device_info)
 
-                        self.run_thread = threading.Thread(target=self.detect_apriltags, args=(device_info,))
-                        self.run_thread.daemon = True
-                        self.run_thread.start()
-                    else:
-                        log.error("Camera {} not found. Attempting to restart thread...".format(self.camera_params['id']))
+                    sleep(1)
+                else:
+                    if self.run_thread is None or not self.run_thread.is_alive():
+                        found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
+                        self.nt_depthai_tab.putBoolean("Localizer Status", found)
 
-                if self.run_thread is not None and not self.run_thread.is_alive():
-                    log.error("{} thread died. Restarting thread...".format(self.camera_params['device_type']))
-            sleep(1)
+                        if found:
+                            log.info("Camera {} found. Starting processing thread...".format(self.camera_params['id']))
+
+                            self.run_thread = threading.Thread(target=self.detect_apriltags, args=(device_info,))
+                            self.run_thread.daemon = True
+                            self.run_thread.start()
+                        else:
+                            log.error("Camera {} not found. Attempting to restart thread...".format(self.camera_params['id']))
+
+                    if self.run_thread is not None and not self.run_thread.is_alive():
+                        log.error("{} thread died. Restarting thread...".format(self.camera_params['device_type']))
+                sleep(1)
+        except KeyboardInterrupt as e:
+            log.info("Keyboard Interrupt")
+            if self.run_thread is not None:
+                self.run_thread.join()
 
     def detect_apriltags(self, device):
         try:
@@ -400,6 +405,7 @@ class LocalizationHost:
 
         self.lastMonoFrame = copy.copy(monoFrame)
         self.lastDepthFrame = copy.copy(depthFrame)
+        self.camera_stream.setFrame(monoFrame)
 
         key = cv2.waitKey(1)
         if key == ord('q'):
@@ -446,17 +452,6 @@ class LocalizationHost:
             log.error("Could not connect to NetworkTables. Restarting server...")
 
         return NT_Instance
-
-    def _csCoreThread(self):
-        cap = cv2.VideoCapture(0)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-
-        img = None
-        while True:
-            retval, img = cap.read(img)
-            if retval:
-                self.csCamera.putFrame(img)
 
 
 if __name__ == '__main__':
