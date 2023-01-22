@@ -20,21 +20,23 @@ def generateCameraParameters(pipeline, pipeline_info, device_info):
         eepromData = device.readCalibration().getEepromData()
         iMatrix = eepromData.cameraData.get(dai.CameraBoardSocket.RIGHT).intrinsicMatrix
 
-        device_type = constants.CAMERAS['Forward_Localizers']
+        device_type = 'Forward_Localizers'
         if deviceID in constants.CAMERAS['Rear_Localizers']['ids'].keys():
-            device_type = constants.CAMERAS['Rear_Localizers']
+            device_type = 'Rear_Localizers'
+        device_params = constants.CAMERAS[device_type]
 
-        deviceName = device_type['ids'][deviceID]
+        deviceName = device_params['ids'][deviceID]
         hfov = constants.CAMERA_PARAMS[deviceName]["mono"]["hfov"]
         vfov = constants.CAMERA_PARAMS[deviceName]["mono"]["vfov"]
 
         camera_params = {
             "device_name": deviceName,
+            "device_type": device_type,
             "id": deviceID,
-            "nt_name": device_type['nt_name'],
+            "nt_name": device_params['nt_name'],
             "hfov": hfov,
             "vfov": vfov,
-            "mount_angle_radians": math.radians(device_type['mount_angle'][0]),
+            "mount_angle_radians": math.radians(device_params['mount_angle'][0]),
             "iMatrix": np.array(iMatrix).reshape(3, 3),
             # fx, fy, cx, cy
             "intrinsicValues": (iMatrix[0][0], iMatrix[1][1], iMatrix[0][2], iMatrix[1][2]),

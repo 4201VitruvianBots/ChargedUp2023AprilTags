@@ -111,7 +111,7 @@ class LocalizationHost:
                         break
 
             if found:
-                log.info("Goal Camera {} found".format(device_info.getMxId()))
+                log.info("Camera {} found".format(device_info.getMxId()))
 
                 self.camera_params = generateCameraParameters(self.pipeline, self.pipeline_info, device_info)
                 self.hostSpatials = HostSpatialsCalc(self.camera_params, self.tag_dictionary, log)
@@ -119,7 +119,7 @@ class LocalizationHost:
                 self.nt_depthai_tab = self.NT_Instance.getTable(self.camera_params['nt_name'])
                 break
             else:
-                log.error("No Goal Cameras found. Polling again...")
+                log.error("No Cameras found. Polling again...")
                 sleep(1)
 
         self.lastMonoFrame = None
@@ -165,16 +165,16 @@ class LocalizationHost:
                     self.nt_depthai_tab.putBoolean("Localizer Status", found)
 
                     if found:
-                        log.info("Goal Camera {} found. Starting processing thread...".format(self.camera_params['id']))
+                        log.info("Camera {} found. Starting processing thread...".format(self.camera_params['id']))
 
                         self.run_thread = threading.Thread(target=self.detect_apriltags, args=(device_info,))
                         self.run_thread.daemon = True
                         self.run_thread.start()
                     else:
-                        log.error("Goal Camera {} not found. Attempting to restart thread...".format(self.camera_params['id']))
+                        log.error("Camera {} not found. Attempting to restart thread...".format(self.camera_params['id']))
 
                 if self.run_thread is not None and not self.run_thread.is_alive():
-                    log.error("Goal thread died. Restarting thread...")
+                    log.error("{} thread died. Restarting thread...".format(self.camera_params['device_type']))
             sleep(1)
 
     def detect_apriltags(self, device):

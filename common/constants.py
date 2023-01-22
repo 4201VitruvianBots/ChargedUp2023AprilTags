@@ -10,7 +10,7 @@ CAMERAS = {
         'mount_offset': [0, 0, 0],
         # pitch, roll, yaw
         'mount_angle': [0, 0, 0],
-        'nt_name': 'depthai-f',
+        'nt_name': 'fLocalizer',
         'ids': {
             '14442C10218CCCD200': 'OAK-D',
             '18443010B1FA0C1300': 'OAK-D Lite',
