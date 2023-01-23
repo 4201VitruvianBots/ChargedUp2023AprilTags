@@ -32,8 +32,8 @@ class AprilTagDetector:
     def detect(self, frame):
         return self.detector.detect(frame)
 
-    def estimatePose(self, frame):
+    def estimatePose(self, tag):
         if self.poseEstimator is not None:
-            return self.poseEstimator.detect(frame)
+            return self.poseEstimator.estimate(tag)
         else:
             return None

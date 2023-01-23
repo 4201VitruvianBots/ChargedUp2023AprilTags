@@ -12,8 +12,6 @@ from os.path import basename
 import socket
 import sys
 
-import cscore as cs
-import robotpy_apriltag
 from ntcore import NetworkTableInstance
 
 from aprilTags.apriltagDetector import AprilTagDetector
@@ -22,7 +20,7 @@ from common import utils
 from common.cscoreServer import CSCoreServer
 from common.depthaiUtils import generateCameraParameters
 from common.imu import navX
-from common.tag_dictionary import TAG_DICTIONARY
+from aprilTags.tag_dictionary import TAG_DICTIONARY
 from pipelines import spatialCalculator_pipelines
 from spatialCalculator import HostSpatialsCalc, estimate_robot_pose_with_solvePnP
 
@@ -93,7 +91,7 @@ class LocalizationHost:
         self.gyro = None
         if self.USE_EXTERNAL_IMU:
             try:
-                gyro = navX('COM4')
+                self.gyro = navX('COM4')
             except Exception as e:
                 log.error("Could not initialize gyro")
 
