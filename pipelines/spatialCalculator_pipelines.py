@@ -171,6 +171,7 @@ def create_spatialCalculator_pipeline():
 
 
 def capture(device_info, camera_settings=None):
+    errorCount = 0
     with dai.Device(pipeline, device_info) as device:
         # device.setIrLaserDotProjectorBrightness(200)
         # device.setIrFloodLightBrightness(1500)
@@ -185,8 +186,13 @@ def capture(device_info, camera_settings=None):
             try:
                 inDepth = depthQueue.get()  # blocking call, will wait until a new data has arrived
                 inRight = qRight.get()
+                errorCount = 0
             except Exception as e:
                 log.error("Frame not received")
+                errorCount = errorCount + 1
+                if errorCount > 5:
+                    log.error("Too many frames dropped. Attempting to restart")
+                    yield -1, None, None, None
                 continue
 
             depthFrame = inDepth.getFrame()
@@ -203,4 +209,4 @@ def capture(device_info, camera_settings=None):
                     qInputRight.send(ctrl)
                     prev_camera_settings = copy.copy(camera_settings)
 
-            yield frameRight, depthFrame, timestampNs
+            yield 0, frameRight, depthFrame, timestampNs
