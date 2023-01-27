@@ -168,6 +168,8 @@ class LocalizationHost:
                         if found:
                             log.info("Camera {} found. Starting processing thread...".format(self.camera_params['id']))
 
+                            # while True:
+                            #     self.detect_apriltags(device_info)
                             self.run_thread = threading.Thread(target=self.detect_apriltags, args=(device_info,))
                             self.run_thread.daemon = True
                             self.run_thread.start()
@@ -267,6 +269,7 @@ class LocalizationHost:
                     "translation": tagTranslation,
                     "estimatedRobotPose": robotPose,
                 }
+
                 detectedTags.append(tagInfo)
                 x_pos.append(robotPose['x'])
                 y_pos.append(robotPose['y'])
