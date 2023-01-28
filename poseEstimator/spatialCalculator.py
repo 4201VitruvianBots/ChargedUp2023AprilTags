@@ -1,6 +1,8 @@
 import math
 import numpy as np
 
+from common.mathUtils import euler_from_quaternion
+
 
 class HostSpatialsCalc:
     # We need device object to get calibration data
@@ -45,8 +47,8 @@ class HostSpatialsCalc:
     # roi has to be list of ints
     def calc_spatials(self, depthFrame, tag, roi, robotAngles, averaging_method=np.mean):
         tagPose = self.tagDictionary['tags'][tag.getId() - 1]['pose']['translation']
-        tagRotation = self.tagDictionary['tags'][tag.getId() - 1]['pose']['rotation']['quaternion']
-
+        tagQuarternion = self.tagDictionary['tags'][tag.getId() - 1]['pose']['rotation']['quaternion']
+        tagRoll, tagPitch, tagYaw = euler_from_quaternion(tagQuarternion['X'], tagQuarternion['Y'], tagQuarternion['Z'], tagQuarternion['W'])
         # roi = self._check_input(roi, depthFrame)  # If point was passed, convert it to ROI
         xmin, ymin, xmax, ymax = roi
 
@@ -80,8 +82,8 @@ class HostSpatialsCalc:
         camera_yaw = 0 if robotAngles['yaw'] is None else robotAngles['yaw']
         tag_translation = {
             # In WPILib coordinates
-            'x': math.cos(angle_x + camera_yaw) * xy_target_distance * -tagRotation['W'],
-            'y': -math.sin(angle_x + camera_yaw) * xy_target_distance * tagRotation['W'],
+            'x': math.cos(angle_x + camera_yaw + (math.pi - tagYaw)) * xy_target_distance,
+            'y': -math.sin(angle_x + camera_yaw + (math.pi - tagYaw)) * xy_target_distance,
             'z': math.sin(camera_angle + angle_y) * spatials['z'],
             # In Camera orientation
             'x_angle': math.degrees(angle_x),

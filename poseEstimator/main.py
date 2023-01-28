@@ -236,7 +236,7 @@ class LocalizationHost:
         pnp_tag_id = []
         pnp_x_pos = []
         pnp_y_pos = []
-        pose_id = [0]
+        pose_id = []
         if len(tags) > 0:
             for tag in tags:
                 if not self.DISABLE_VIDEO_OUTPUT:

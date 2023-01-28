@@ -93,6 +93,9 @@ def create_stereoDepth_pipeline(enable_recording=False):
 
 
 def create_spatialCalculator_pipeline():
+    global pipeline
+    global pipeline_info
+
     # Start defining a pipeline
     pipeline = dai.Pipeline()
 

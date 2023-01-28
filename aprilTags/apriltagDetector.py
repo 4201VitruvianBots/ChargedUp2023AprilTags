@@ -17,9 +17,9 @@ class AprilTagDetector:
 
         self.poseEstimator = None
         if camera_params is not None:
-            self.poseEstimator = self.setCamperaParams(camera_params)
+            self.poseEstimator = self.setCameraParams(camera_params)
 
-    def setCamperaParams(self, camera_params):
+    def setCameraParams(self, camera_params):
         detectorIntrinsics = robotpy_apriltag.AprilTagPoseEstimator.Config(
             constants.TAG_SIZE_M,
             camera_params['intrinsicValues'][0],
