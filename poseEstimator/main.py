@@ -215,8 +215,9 @@ class LocalizationHost:
                 pass
         else:
             robotAngles = {
-                'pitch': math.radians(self.nt_drivetrain_tab.getNumber("Pitch_Degrees", 0.0)),
-                'yaw': math.radians(self.nt_drivetrain_tab.getNumber("Heading_Degrees", 0.0))
+                'pitch': math.radians(self.nt_drivetrain_tab.getNumber("Yaw", 0.0)),
+                'roll': math.radians(self.nt_drivetrain_tab.getNumber("Roll", 0.0)),
+                'yaw': math.radians(self.nt_drivetrain_tab.getNumber("Pitch", 0.0))
             }
 
         if not self.DISABLE_VIDEO_OUTPUT:
@@ -235,8 +236,7 @@ class LocalizationHost:
         pnp_tag_id = []
         pnp_x_pos = []
         pnp_y_pos = []
-        pnp_z_pos = []
-        pose_id = []
+        pose_id = [0]
         if len(tags) > 0:
             for tag in tags:
                 if not self.DISABLE_VIDEO_OUTPUT:
@@ -245,7 +245,7 @@ class LocalizationHost:
                 if tag.getId() not in self.valid_tags:
                     log.warning("Tag ID {} found, but not defined".format(tag.getId()))
                     continue
-                elif tag.getDecisionMargin() < 30:
+                elif tag.getDecisionMargin() < 35:
                     log.warning("Tag {} found, but not valid".format(tag.getId()))
                     continue
                 tagCorners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
@@ -283,7 +283,7 @@ class LocalizationHost:
 
                 # Use this to compare stereoDepth results vs solvePnP
                 if self.ENABLE_SOLVEPNP:
-                    tagDictionaryPose = self.tag_dictionary['tags'][tag.getId()]['pose']['translation']
+                    tagDictionaryPose = self.tag_dictionary['tags'][tag.getId() - 1]['pose']['translation']
                     pnpRobotPose = estimate_robot_pose_with_solvePnP(tag, tagInfo, tagDictionaryPose, self.camera_params, robotAngles)
 
                     tagPose = self.detector.estimatePose(tag)
@@ -332,16 +332,18 @@ class LocalizationHost:
         self.nt_depthai_tab.putNumberArray("PnP Y Poses", pnp_y_pos)
         self.nt_depthai_tab.putNumberArray("botpose", botPose)
 
-        self.stats['numTags'] = len(detectedTags)
-        self.stats['depthAI'] = {
-            'x_pos': x_pos,
-            'y_pos': y_pos,
-            'z_pos': z_pos,
-        }
-        self.stats['solvePnP'] = {
-            'x_pos': pnp_x_pos,
-            'y_pos': pnp_y_pos,
-            'z_pos': [0]
+        self.stats = {
+            'numTags': len(detectedTags),
+            'depthAI': {
+                'x_pos': x_pos,
+                'y_pos': y_pos,
+                'z_pos': z_pos,
+            },
+            'solvePnP': {
+                'x_pos': pnp_x_pos,
+                'y_pos': pnp_y_pos,
+                'z_pos': [0]
+            }
         }
 
         if not self.DISABLE_VIDEO_OUTPUT:

@@ -158,7 +158,7 @@ class DebugWindow(QtWidgets.QWidget):
                                     self.tagCheckbox5.isChecked(), self.tagCheckbox6.isChecked(),
                                     self.tagCheckbox7.isChecked(), self.tagCheckbox8.isChecked()])) + 1
 
-        self.tagFilter = filter.tolist()
+        self.tagFilter = filter.tolist()[0]
 
     def getTagFilter(self):
         return self.tagFilter
