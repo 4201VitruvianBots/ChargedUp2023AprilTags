@@ -155,9 +155,12 @@ class LocalizationHost:
                 if not self.DISABLE_VIDEO_OUTPUT:
                     found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
                     if found:
-                        self.detect_apriltags(device_info)
-
-                    sleep(1)
+                        try:
+                            self.detect_apriltags(device_info)
+                        except Exception as e:
+                            pass
+                    else:
+                        log.warning("No DepthAI Camera found")
                 else:
                     if self.run_thread is None or not self.run_thread.is_alive():
                         found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
@@ -166,26 +169,31 @@ class LocalizationHost:
                         if found:
                             log.info("Camera {} found. Starting processing thread...".format(self.camera_params['id']))
 
-                            self.run_thread = threading.Thread(target=self.detect_apriltags, args=(device_info,))
-                            self.run_thread.daemon = True
-                            self.run_thread.start()
+                            while True:
+                                try:
+                                    self.detect_apriltags(device_info)
+                                except Exception as e:
+                                    break
+
+                            # self.run_thread = threading.Thread(target=self.detect_apriltags, args=(device_info,))
+                            # self.run_thread.daemon = True
+                            # self.run_thread.start()
                         else:
                             log.error("Camera {} not found. Attempting to restart thread...".format(self.camera_params['id']))
 
                     if self.run_thread is not None and not self.run_thread.is_alive():
                         log.error("{} thread died. Restarting thread...".format(self.camera_params['device_type']))
-                sleep(1)
+                sleep(0.5)
         except KeyboardInterrupt as e:
             log.info("Keyboard Interrupt")
             if self.run_thread is not None:
                 self.run_thread.join()
 
     def detect_apriltags(self, device):
-        try:
-            for monoFrame, depthFrame, timestampNs in spatialCalculator_pipelines.capture(device, self.camera_settings):
-                self.process_results(monoFrame, depthFrame, timestampNs)
-        except Exception as e:
-            log.error("Exception {}".format(e))
+        for returnCode, monoFrame, depthFrame, timestampNs in spatialCalculator_pipelines.capture(device, self.camera_settings):
+            if returnCode == -1:
+                raise IOError("DepthAI Fatal Crash")
+            self.process_results(monoFrame, depthFrame, timestampNs)
 
     def process_results(self, monoFrame, depthFrame, timestampNs):
         self.fps.nextIter()
@@ -265,6 +273,7 @@ class LocalizationHost:
                     "translation": tagTranslation,
                     "estimatedRobotPose": robotPose,
                 }
+
                 detectedTags.append(tagInfo)
                 x_pos.append(robotPose['x'])
                 y_pos.append(robotPose['y'])
