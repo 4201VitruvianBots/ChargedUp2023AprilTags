@@ -14,7 +14,7 @@ log.setLevel(logging.DEBUG)
 
 class CSCoreServer:
 
-    def __init__(self, name, ip=None, port=8081, width=1280, height=720, fps=60):
+    def __init__(self, name, ip=None, port=5800, width=640, height=400, fps=30):
         self.frame = np.zeros(shape=(height, width), dtype=np.uint8)
         self.csCamera = cs.CvSource(name, cs.VideoMode.PixelFormat.kGray, width, height, fps)
         self.csCamera.setConnectionStrategy(cs.VideoSource.ConnectionStrategy.kConnectionKeepOpen)

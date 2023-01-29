@@ -102,6 +102,8 @@ class LocalizationHost:
         while not found:
             if self.valid_cameras is None:
                 found, device_info = dai.Device.getFirstAvailableDevice()
+                # device_info = dai.DeviceInfo("169.254.1.222")
+                found = True
             else:
                 for device_id in self.valid_cameras:
                     found, device_info = dai.Device.getDeviceByMxId(device_id)
@@ -154,6 +156,8 @@ class LocalizationHost:
             while True:
                 if not self.DISABLE_VIDEO_OUTPUT:
                     found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
+                    # device_info = dai.DeviceInfo("169.254.1.222")
+                    # found = True
                     if found:
                         try:
                             self.detect_apriltags(device_info)
@@ -163,7 +167,9 @@ class LocalizationHost:
                         log.warning("No DepthAI Camera found")
                 else:
                     if self.run_thread is None or not self.run_thread.is_alive():
-                        found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
+                        # found, device_info = dai.Device.getDeviceByMxId(self.camera_params['id'])
+                        device_info = dai.DeviceInfo("169.254.1.222")
+                        found = True
                         self.nt_depthai_tab.putBoolean("Localizer Status", found)
 
                         if found:
@@ -346,6 +352,9 @@ class LocalizationHost:
             }
         }
 
+        cv2.circle(monoFrame, (int(monoFrame.shape[1] / 2), int(monoFrame.shape[0] / 2)), 1, (255, 255, 255), 1)
+        cv2.putText(monoFrame, "FPS: {:.2f}".format(fpsValue), (0, 24), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
+        cv2.putText(monoFrame, "Latency: {:.2f}ms".format(avgLatency), (0, 50), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
         if not self.DISABLE_VIDEO_OUTPUT:
             for detectedTag in detectedTags:
                 points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
@@ -390,9 +399,6 @@ class LocalizationHost:
                               (0, 0, 0), 3)
 
             if not self.testGui.getPauseResumeState():
-                cv2.circle(monoFrame, (int(monoFrame.shape[1]/2), int(monoFrame.shape[0]/2)), 1, (255, 255, 255), 1)
-                cv2.putText(monoFrame, "FPS: {:.2f}".format(fpsValue), (0, 24), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
-                cv2.putText(monoFrame, "Latency: {:.2f}ms".format(avgLatency), (0, 50), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
 
                 depthFrameColor = cv2.normalize(depthFrame, None, 255, 0, cv2.NORM_INF, cv2.CV_8UC1)
                 depthFrameColor = cv2.equalizeHist(depthFrameColor)
