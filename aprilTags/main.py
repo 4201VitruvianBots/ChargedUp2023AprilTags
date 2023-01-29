@@ -1,6 +1,5 @@
 import argparse
 import copy
-import threading
 from time import sleep
 
 import cv2
@@ -14,15 +13,13 @@ import sys
 
 from ntcore import NetworkTableInstance
 
-from aprilTags.apriltagDetector import AprilTagDetector
 from common import constants
 from common import utils
 from common.cscoreServer import CSCoreServer
 from common.depthaiUtils import generateCameraParameters
 from common.imu import navX
 from aprilTags.tag_dictionary import TAG_DICTIONARY
-from pipelines import spatialCalculator_pipelines, apriltags_pipeline
-from spatialCalculator import HostSpatialsCalc, estimate_robot_pose_with_solvePnP
+from pipelines import apriltags_pipeline
 
 from pipelines.apriltags_pipeline import create_dual_mono_apriltag_pipeline
 
@@ -210,7 +207,7 @@ class AprilTagsHost:
                     self.testGui.updatePitchValue(math.degrees(robotAngles['pitch']))
             except Exception as e:
                 # log.error("Could not grab gyro values")
-            pass
+                pass
         else:
             robotAngles = {
                 'pitch': math.radians(self.nt_drivetrain_tab.getNumber("Yaw", 0.0)),
@@ -221,7 +218,7 @@ class AprilTagsHost:
         for i in range(len(self.camera_params['cameras'])):
             monoFrame = frames[i]
             fps = self.camera_params['cameras'][i]['fps']
-            timestamp = timestampsp[i]
+            timestamp = timestamps[i]
             detector = self.camera_params['cameras'][i]['detector']
 
             fps.nextIter()
