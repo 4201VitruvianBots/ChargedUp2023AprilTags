@@ -16,12 +16,12 @@ robotToCamera = geometry.Transform3d()
 
 tagTransform = geometry.Transform3d(geometry.Translation3d(1, 0, 1), geometry.Rotation3d(0, 0, 0))
 
-wpiTransform = geometry.CoordinateSystem.convert(tagTransform, geometry.CoordinateSystem.EDN(), geometry.CoordinateSystem.NED())
+wpiTransform = geometry.CoordinateSystem.convert(tagTransform,
+                                                 geometry.CoordinateSystem.EDN(),
+                                                 geometry.CoordinateSystem.NWU())
 
-wpiTransform2 = geometry.Transform3d(geometry.Translation3d(wpiTransform.x, -wpiTransform.y, wpiTransform.z), wpiTransform.rotation())
-
-robotPose = tagPose.transformBy(wpiTransform2) \
-    .transformBy(robotToCamera)
+robotPose = tagPose.transformBy(wpiTransform)\
+                    .transformBy(robotToCamera)
 
 print("Tag Position - X: {}\tY: {}".format(tagPose.x, tagPose.y))
 print("Robot Position - X: {}\tY: {}".format(robotPose.x, robotPose.y))

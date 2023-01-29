@@ -158,14 +158,12 @@ def main():
                         tagR3D = geometry.Rotation3d(geometry.Quaternion(tagRotation['W'], tagRotation['X'], tagRotation['Y'], tagRotation['Z']))
                         tagPose = geometry.Pose3d(tagT3D, tagR3D)
 
-
                         wpiTransform = geometry.CoordinateSystem.convert(tagTransform,
                                                                          geometry.CoordinateSystem.EDN(),
-                                                                         geometry.CoordinateSystem.NED())
-                        wpiTransform2 = geometry.Transform3d(geometry.Translation3d(wpiTransform.x, -wpiTransform.y, wpiTransform.z), wpiTransform.rotation())
+                                                                         geometry.CoordinateSystem.NWU())
                         # tagEstimatePose = geometry.Pose3d(tagTransform.translation(), tagTransform.rotation())
                         # tagPoseTranslation = geometry.Transform3d(tagPose.translation(), tagPose.rotation())
-                        robotPose = tagPose.transformBy(wpiTransform2) \
+                        robotPose = tagPose.transformBy(wpiTransform) \
                                            .transformBy(robotToCamera.inverse())
 
                         pose_id.append(tag.getId())
