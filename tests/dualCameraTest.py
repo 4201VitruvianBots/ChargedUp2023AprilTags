@@ -10,6 +10,8 @@ import robotpy_apriltag
 import wpimath.geometry
 from ntcore import NetworkTableInstance
 from wpimath import geometry
+from wpimath.geometry import CoordinateSystem, CoordinateAxis, Translation3d, Rotation3d, Quaternion, Pose3d, \
+    Transform3d
 
 from aprilTags.apriltagDetector import AprilTagDetector
 from aprilTags.tag_dictionary import TAG_DICTIONARY
@@ -154,17 +156,22 @@ def main():
                         tagValues = tag_dictionary['tags'][tag.getId() - 1]['pose']
                         tagTranslation = tagValues['translation']
                         tagRotation = tagValues['rotation']['quaternion']
-                        tagT3D = geometry.Translation3d(tagTranslation['x'], tagTranslation['y'], tagTranslation['z'])
-                        tagR3D = geometry.Rotation3d(geometry.Quaternion(tagRotation['W'], tagRotation['X'], tagRotation['Y'], tagRotation['Z']))
-                        tagPose = geometry.Pose3d(tagT3D, tagR3D)
+                        tagT3D = Translation3d(tagTranslation['x'], tagTranslation['y'], tagTranslation['z'])
+                        tagR3D = Rotation3d(Quaternion(tagRotation['W'], tagRotation['X'], tagRotation['Y'], tagRotation['Z']))
+                        tagPose = Pose3d(tagT3D, tagR3D)
 
-                        wpiTransform = geometry.CoordinateSystem.convert(tagTransform,
-                                                                         geometry.CoordinateSystem.EDN(),
-                                                                         geometry.CoordinateSystem.NWU())
-                        # tagEstimatePose = geometry.Pose3d(tagTransform.translation(), tagTransform.rotation())
-                        # tagPoseTranslation = geometry.Transform3d(tagPose.translation(), tagPose.rotation())
-                        robotPose = tagPose.transformBy(wpiTransform) \
-                                           .transformBy(robotToCamera.inverse())
+                        #WDS, WUS, EDN, EUS,
+                        # cameraCoordinateSystem = CoordinateSystem(CoordinateAxis.E(), CoordinateAxis.U(), CoordinateAxis.S())
+                        cameraCoordinateSystem = CoordinateSystem(CoordinateAxis.W(), CoordinateAxis.D(), CoordinateAxis.S())
+                        rotation2 = Rotation3d(tagTransform.rotation().x, -tagTransform.rotation().y, -tagTransform.rotation().z)
+                        tagTransform2 = Transform3d(geometry.Translation3d(tagTransform.x, -tagTransform.y, tagTransform.z), rotation2)
+                        wpiTransform = CoordinateSystem.convert(tagTransform2,
+                                                                cameraCoordinateSystem,
+                                                                CoordinateSystem.NWU())
+                        if tag.getId() == 1:
+                        # print("Tag: {}\tX: {}\tY: {}\tZ: {}".format(tag.getId(), tagTransform2.x, tagTransform2.y, tagTransform2.z))
+                            print("Tag: {}\tX: {:.02f}\tY: {:.02f}\tZ: {:.02f}".format(tag.getId(), wpiTransform.x_feet * 12, wpiTransform.y_feet * 12, wpiTransform.z_feet * 12))
+                        robotPose = tagPose.transformBy(wpiTransform.inverse())
 
                         pose_id.append(tag.getId())
                         robot_pos_x.append(robotPose.translation().x)
@@ -202,7 +209,7 @@ def main():
                         cv2.putText(inMono, "tag_id: {}".format(tag.getId()),
                                     (textX, textY), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
 
-                cv2.circle(inMono, (int(inMono.shape[1] / 2), int(inMono.shape[0] / 2)), 1, (255, 255, 255),
+                cv2.circle(inMono, (int(inMono.shape[1] / 2), int(inMono.shape[0] / 2)), 5, (255, 255, 255),
                            1)
                 cv2.putText(inMono, "FPS: {:.2f}".format(fpsValue), (0, 24), cv2.FONT_HERSHEY_TRIPLEX, 1,
                             (255, 255, 255))
@@ -216,6 +223,7 @@ def main():
 
                 if camera['camera'] == 'rightMono':
                     botPose = [np.average(robot_pos_x), np.average(robot_pos_y), np.average(robot_pos_z)]
+                    # print("Bot Pose - X:{:.02f}\tY:{:.02f}\tZ:{:.02f}".format(botPose[0], botPose[1], botPose[2]))
                     nt_depthai_tab.putNumberArray("tid", pose_id)
                     nt_depthai_tab.putNumberArray("Robot Pose X", robot_pos_x)
                     nt_depthai_tab.putNumberArray("Robot Pose Y", robot_pos_y)
