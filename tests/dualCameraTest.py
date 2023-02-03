@@ -160,21 +160,12 @@ def main():
                         tagR3D = Rotation3d(Quaternion(tagRotation['W'], tagRotation['X'], tagRotation['Y'], tagRotation['Z']))
                         tagPose = Pose3d(tagT3D, tagR3D)
 
-                        #WDS, WUS, EDN, EUS,
-                        # cameraCoordinateSystem = CoordinateSystem(CoordinateAxis.E(), CoordinateAxis.U(), CoordinateAxis.S())
-                        cameraCoordinateSystem = CoordinateSystem(CoordinateAxis.W(), CoordinateAxis.D(), CoordinateAxis.S())
-                        rotation2 = Rotation3d(tagTransform.rotation().x, tagTransform.rotation().y, tagTransform.rotation().z)
-                        # tagTransform2 = Transform3d(geometry.Translation3d(tagTransform.x, -tagTransform.y, tagTransform.z), rotation2)
-                        wpiTransform = CoordinateSystem.convert(tagTransform,
-                                                                cameraCoordinateSystem,
+                        wpiTransform = CoordinateSystem.convert(tagTransform.translation(),
+                                                                CoordinateSystem.EDN(),
                                                                 CoordinateSystem.NWU())
-                        wpiTransform = Transform3d(Translation3d(wpiTransform.translation().x, wpiTransform.translation().y, wpiTransform.translation().z), wpiTransform.rotation())
 
-                        if tag.getId() == 1:
-                            print("Tag: {}\tX: {:.02f}\tY: {:.02f}\tZ: {:.02f}".format(tag.getId(), tagTransform.translation().x, tagTransform.translation().y, tagTransform.translation().z))
-                            # print("Tag: {}\tX: {:.02f}\tY: {:.02f}\tZ: {:.02f}".format(tag.getId(), wpiTransform.x_feet, wpiTransform.y_feet, wpiTransform.z_feet))
-                        # wpiTransform = Transform3d(Translation3d(wpiTransform.translation().x, wpiTransform.translation().y, wpiTransform.translation().x), wpiTransform.rotation())
-                        robotPose = tagPose.transformBy(wpiTransform.inverse())
+                        robotPose = tagPose.transformBy(Transform3d(wpiTransform, tagTransform.rotation())) \
+                                           .transformBy(Transform3d(robotPose.translation(), robotPose.rotation()))
 
                         pose_id.append(tag.getId())
                         robot_pos_x.append(robotPose.translation().x)

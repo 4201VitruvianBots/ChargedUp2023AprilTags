@@ -68,10 +68,9 @@ class AprilTagsHost:
             disabledStdOut = logging.StreamHandler(stream=None)
             log.addHandler(disabledStdOut)
 
-        log.info("Starting AprilTag Spatial Detector")
+        log.info("Starting AprilTag Detector")
 
         self.DISABLE_VIDEO_OUTPUT = args.test
-        self.ENABLE_SOLVEPNP = args.apriltag_pose
 
         self.pipeline, self.pipeline_info = create_dual_mono_apriltag_pipeline()
 
@@ -85,13 +84,6 @@ class AprilTagsHost:
 
         self.tag_dictionary = TAG_DICTIONARY
         self.valid_tags = [t['ID'] for t in self.tag_dictionary['tags']]
-
-        self.gyro = None
-        if self.USE_EXTERNAL_IMU:
-            try:
-                self.gyro = navX('COM4')
-            except Exception as e:
-                log.error("Could not initialize gyro")
 
         self.latency = np.array([])
 

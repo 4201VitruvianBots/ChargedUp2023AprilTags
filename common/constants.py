@@ -1,4 +1,4 @@
-
+import cscore
 import numpy as np
 
 TAG_SIZE_M = 0.1524
@@ -16,6 +16,7 @@ CAMERAS = {
             '18443010B1FA0C1300': 'OAK-D Lite',
             '18443010110CC71200': 'OAK-D Pro W',
             '1944301061F9721300': 'OAK-D Lite',
+            'usb_camera': 'OV2311',
 
         }
     },
@@ -86,6 +87,16 @@ CAMERA_PARAMS = {
             "vfov": 80.0,
             "rhfov": 97.0,
             "rvfov": 70.0
+        },
+    },
+    "OV2311": {
+        "height": 1600,
+        "width": 1200,
+        "fps": 50,
+        "pixelFormat": cscore.VideoMode.PixelFormat.kGray,
+        "mono": {
+            "hfov": 75.0,
+            "vfov": 75.0, # TO BE DETERMINED
         },
     }
 }
