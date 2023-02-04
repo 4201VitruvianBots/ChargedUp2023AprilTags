@@ -100,24 +100,8 @@ class AprilTagsUSBHost:
 
         # camera setup
         self.camera_params = generateOV2311CameraParameters(device_name)
-        if platform.system() == 'linux':
-            self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
-            self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
-            self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
-            self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
-            self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
-            self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
-            self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
-        else:
-            self.camera = cscore.UsbCamera(self.camera_params["device_name"], 0)
-            settings = open("utils/{}.json".format("OV2311_1"))
-            jsonData = json.load(settings)
-            test = self.camera.setConfigJson(jsonData)
-            self.cvsink = cscore.CvSink("cvsink")
-            self.cvsink.setSource(self.camera)
-
+        self.cameraSetup()
+        
         self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
         self.nt_apriltag_tab = self.NT_Instance.getTable(self.camera_params["nt_name"])
 
@@ -173,7 +157,7 @@ class AprilTagsUSBHost:
         frame = np.zeros(shape=(self.camera_params["height"], self.camera_params["width"], 1), dtype=np.uint8)
         while True:
             if self.camera is not None:
-                if platform.system() == 'linux':
+                if platform.system() == 'Linux':
                     retval, frame = self.camera.read()
                     timestamp = time.time_ns()
                     if not retval:
@@ -181,6 +165,12 @@ class AprilTagsUSBHost:
                         self.camera.release()
                         self.camera = None  # Force reconnect
                         time.sleep(2)
+                        continue
+                    #frame = cv2.imdecode(frame, cv2.IMREAD_GRAYSCALE)
+                    log.info("Frame Shape: {}".format(frame.shape))
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                    
+                    self.process_results(frame, timestamp)
                 else:
                     timestamp, frame = self.cvsink.grabFrame(frame)
 
@@ -190,8 +180,10 @@ class AprilTagsUSBHost:
                     if len(frame.shape) > 2:
                         frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
-                self.process_results(frame, timestamp)
-
+                    self.process_results(frame, timestamp)
+            else:
+                self.cameraSetup()
+            
     def process_results(self, frame, timestamp):
         if self.gyro is not None:
             try:
@@ -427,6 +419,31 @@ class AprilTagsUSBHost:
 
         return NT_Instance
 
+    def cameraSetup(self):
+        if platform.system() == 'Linux':
+            self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
+            self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
+            self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
+            self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
+            self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
+            self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
+            self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
+            #self.camera = cv2.VideoCapture("v4l2src device=/dev/video" + str(0) + 
+            #                               " extra_controls=\"c,exposure_auto=" + str(self.camera_params["exposure_auto"]) + 
+            #                               ",exposure_absolute=" + str(self.camera_params["exposure"]) + 
+            #                               ",gain=" + str(self.camera_params["gain"]) + 
+            #                               ",sharpness=0,brightness=0\" ! image/jpeg,format=MJPG,width=" + str(self.camera_params["width"]) + 
+            #                               ",height=" + str(self.camera_params["height"]) + " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
+        else:
+            self.camera = cscore.UsbCamera(self.camera_params["device_name"], 0)
+            settings = open("utils/{}.json".format("OV2311_1"))
+            jsonData = json.load(settings)
+            test = self.camera.setConfigJson(jsonData)
+            self.cvsink = cscore.CvSink("cvsink")
+            self.cvsink.setSource(self.camera)
+    
 
 if __name__ == '__main__':
     log.info("Starting AprilTagsUSBHost")
