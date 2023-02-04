@@ -1,5 +1,6 @@
 import socket
 
+import cscore
 import cscore as cs
 import logging
 import numpy as np
@@ -14,11 +15,8 @@ log.setLevel(logging.DEBUG)
 
 class CSCoreServer:
 
-    def __init__(self, name,  ip=None, port=5800, width=640, height=400, fps=30):
+    def __init__(self, camera, ip=None, port=5800, width=640, height=400, fps=30):
         self.frame = np.zeros(shape=(height, width), dtype=np.uint8)
-        self.csCamera = cs.CvSource(name, cs.VideoMode.PixelFormat.kGray, width, height, fps)
-        self.csCamera.setConnectionStrategy(cs.VideoSource.ConnectionStrategy.kConnectionKeepOpen)
-        self.port = port
 
         try:
             if ip is None:
@@ -28,9 +26,11 @@ class CSCoreServer:
                 self.ip_address = s.getsockname()[0]
             else:
                 self.ip_address = ip
+            self.port = port
 
+            self.cvSource = cscore.CvSource("{}_cvsource".format(camera.getName()), cs.VideoMode.PixelFormat.kMJPEG, width, height, fps)
             self.mjpegServer = cs.MjpegServer(self.ip_address, self.port)
-            self.mjpegServer.setSource(self.csCamera)
+            self.mjpegServer.setSource(self.cvSource)
             log.info("MJPEG Server started at {}:{}".format(self.mjpegServer.getListenAddress(), self.mjpegServer.getPort()))
         except Exception as e:
             log.error("Error Creating MJPEG Server: {}".format(e))
@@ -48,6 +48,6 @@ class CSCoreServer:
         while True:
             # log.debug("MJPEG Server Status: {}".format(self.mjpegServer.getLastStatus()))
             try:
-                self.csCamera.putFrame(self.frame)
+                self.cvSource.putFrame(self.frame)
             except Exception as e:
                 log.error("Could not send frame")

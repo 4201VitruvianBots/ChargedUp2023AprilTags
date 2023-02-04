@@ -101,7 +101,7 @@ class AprilTagsUSBHost:
         self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
         self.nt_apriltag_tab = self.NT_Instance.getTable(self.camera_params["nt_name"])
 
-        self.camera_stream = CSCoreServer(self.camera_params['device_id'], width=self.camera_params["width"], height=self.camera_params["height"], fps=self.camera_params["fps"])
+        self.camera_stream = CSCoreServer(self.camera, width=self.camera_params["width"], height=self.camera_params["height"], fps=self.camera_params["fps"])
 
         self.ip_address = 'localhost'
         self.port = 5800

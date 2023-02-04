@@ -1,7 +1,7 @@
 {
     "fps": 50,
     "height": 1200,
-    "pixel format": "gray",
+    "pixel format": "mjpeg",
     "properties": [
         {
             "name": "raw_Brightness",
@@ -9,15 +9,15 @@
         },
         {
             "name": "Brightness",
-            "value": 50
+            "value": 0
         },
         {
             "name": "raw_Contrast",
-            "value": 32
+            "value": 0
         },
         {
             "name": "Contrast",
-            "value": 50
+            "value": 10
         },
         {
             "name": "raw_Hue",
@@ -25,7 +25,7 @@
         },
         {
             "name": "Hue",
-            "value": 50
+            "value": 0
         },
         {
             "name": "raw_Saturation",
@@ -33,7 +33,7 @@
         },
         {
             "name": "Saturation",
-            "value": 50
+            "value": 0
         },
         {
             "name": "raw_Sharpness",
@@ -61,7 +61,7 @@
         },
         {
             "name": "Gain",
-            "value": 100
+            "value": 5
         },
         {
             "name": "raw_Exposure",
@@ -69,7 +69,7 @@
         },
         {
             "name": "Exposure",
-            "value": 15
+            "value": 10
         }
     ],
     "width": 1600
