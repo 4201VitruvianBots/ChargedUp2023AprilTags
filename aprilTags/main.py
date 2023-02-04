@@ -15,9 +15,8 @@ from ntcore import NetworkTableInstance
 
 from common import constants
 from common import utils
-from common.cscoreServer import CSCoreServer
+from cscore_utils.CSCoreServer import CSCoreServer
 from common.depthaiUtils import generateCameraParameters
-from common.imu import navX
 from aprilTags.tag_dictionary import TAG_DICTIONARY
 from pipelines import apriltags_pipeline
 

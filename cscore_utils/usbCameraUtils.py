@@ -18,7 +18,7 @@ def generateOV2311CameraParameters(deviceID):
     vfov = constants.CAMERA_PARAMS[deviceName]["mono"]["vfov"]
 
     camera_params = {
-        "device_name": deviceName,
+        "device_id": deviceID,
         "device_type": "OV2311",
         "id": 0,
         "nt_name": device_params['nt_name'],

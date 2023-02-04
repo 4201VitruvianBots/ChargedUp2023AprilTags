@@ -7,10 +7,11 @@ import time
 import cscore
 from wpimath.geometry import Translation3d, Rotation3d, Pose3d, Quaternion, CoordinateSystem, Transform3d
 
+from cscore_utils.CSCoreCamera import CSCoreCamera
+
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 
 import cv2
-import depthai as dai
 import logging
 import math
 import numpy as np
@@ -24,13 +25,9 @@ from ntcore import NetworkTableInstance
 from aprilTags.apriltagDetector import AprilTagDetector
 from common import constants
 from common import utils
-from common.cscoreServer import CSCoreServer
-from common.imu import navX
+from cscore_utils.CSCoreServer import CSCoreServer
 from aprilTags.tag_dictionary import TAG_DICTIONARY
-from common.usbCameraUtils import generateOV2311CameraParameters
-from pipelines import apriltags_pipeline
-
-from pipelines.apriltags_pipeline import create_dual_mono_apriltag_pipeline
+from cscore_utils.usbCameraUtils import generateOV2311CameraParameters
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', dest='debug', action="store_true", default=False, help='Start in Debug Mode')
@@ -72,6 +69,7 @@ class AprilTagsUSBHost:
     initialized = False
 
     def __init__(self):
+        self.camera = None
         self.NT_Instance = self.init_networktables()
         if args.performance_test:
             disabledStdOut = logging.StreamHandler(stream=None)
@@ -94,9 +92,7 @@ class AprilTagsUSBHost:
 
         self.latency = np.array([0])
 
-        for caminfo in cscore.UsbCamera.enumerateUsbCameras():
-            print("%s: %s (%s)" % (caminfo.dev, caminfo.path, caminfo.name))
-            device_name = caminfo.name
+        device_name = "OV2311_1"
 
         # camera setup
         self.camera_params = generateOV2311CameraParameters(device_name)
@@ -105,7 +101,7 @@ class AprilTagsUSBHost:
         self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
         self.nt_apriltag_tab = self.NT_Instance.getTable(self.camera_params["nt_name"])
 
-        self.camera_stream = CSCoreServer(self.camera_params['device_name'], width=self.camera_params["width"], height=self.camera_params["height"], fps=self.camera_params["fps"])
+        self.camera_stream = CSCoreServer(self.camera_params['device_id'], width=self.camera_params["width"], height=self.camera_params["height"], fps=self.camera_params["fps"])
 
         self.ip_address = 'localhost'
         self.port = 5800
@@ -172,13 +168,7 @@ class AprilTagsUSBHost:
                     
                     self.process_results(frame, timestamp)
                 else:
-                    timestamp, frame = self.cvsink.grabFrame(frame)
-
-                    if time == 0:
-                        log.error(self.cvsink.getError())
-                        continue
-                    if len(frame.shape) > 2:
-                        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                    timestamp, frame = self.camera.getFrame()
 
                     self.process_results(frame, timestamp)
             else:
@@ -430,6 +420,14 @@ class AprilTagsUSBHost:
             self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
             self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
             self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
+            self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
+            self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
+            self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
+            self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
+            self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
+            self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
             #self.camera = cv2.VideoCapture("v4l2src device=/dev/video" + str(0) + 
             #                               " extra_controls=\"c,exposure_auto=" + str(self.camera_params["exposure_auto"]) + 
             #                               ",exposure_absolute=" + str(self.camera_params["exposure"]) + 
@@ -437,12 +435,7 @@ class AprilTagsUSBHost:
             #                               ",sharpness=0,brightness=0\" ! image/jpeg,format=MJPG,width=" + str(self.camera_params["width"]) + 
             #                               ",height=" + str(self.camera_params["height"]) + " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
         else:
-            self.camera = cscore.UsbCamera(self.camera_params["device_name"], 0)
-            settings = open("utils/{}.json".format("OV2311_1"))
-            jsonData = json.load(settings)
-            test = self.camera.setConfigJson(jsonData)
-            self.cvsink = cscore.CvSink("cvsink")
-            self.cvsink.setSource(self.camera)
+            self.camera = CSCoreCamera(self.camera_params["device_id"], True)
     
 
 if __name__ == '__main__':

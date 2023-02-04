@@ -5,7 +5,7 @@ import logging
 import numpy as np
 
 from common.utils import FPSHandler
-from common.cscoreServer import CSCoreServer
+from cscore_utils.CSCoreServer import CSCoreServer
 from pipelines import spatialCalculator_pipelines
 
 log = logging.getLogger(__name__)

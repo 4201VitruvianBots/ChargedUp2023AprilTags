@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 
-from common.cscoreServer import CSCoreServer
+from cscore_utils.CSCoreServer import CSCoreServer
 
 log = logging.getLogger(__name__)
 c_handler = logging.StreamHandler()
