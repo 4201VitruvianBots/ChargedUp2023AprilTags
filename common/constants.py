@@ -16,8 +16,7 @@ CAMERAS = {
             '18443010B1FA0C1300': 'OAK-D Lite',
             '18443010110CC71200': 'OAK-D Pro W',
             '1944301061F9721300': 'OAK-D Lite',
-            'usb_camera': 'OV2311',
-
+            'OV2311_1': 'OV2311',
         }
     },
     'Rear_Localizers': {
@@ -90,14 +89,21 @@ CAMERA_PARAMS = {
         },
     },
     "OV2311": {
-        "height": 1600,
-        "width": 1200,
+        "height": 1200,
+        "width": 1600,
         "fps": 50,
         "pixelFormat": cscore.VideoMode.PixelFormat.kGray,
         "mono": {
             "hfov": 75.0,
             "vfov": 75.0, # TO BE DETERMINED
         },
+        "camera_matrix": {
+            "OV2311_1": np.array([
+                [8.7638714483680690e+02, 0.0, 8.4331555653705630e+02],
+                [0.0, 8.7644598649542741e+02, 6.5641811849711667e+02],
+                [0.0, 0.0, 1.0]
+            ])
+        }
     }
 }
 

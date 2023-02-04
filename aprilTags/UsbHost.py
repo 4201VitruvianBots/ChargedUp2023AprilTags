@@ -1,8 +1,14 @@
 import argparse
 import copy
+import json
+import os
 import time
 
 import cscore
+from wpimath.geometry import Translation3d, Rotation3d, Pose3d, Quaternion, CoordinateSystem, Transform3d
+
+os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
+
 import cv2
 import depthai as dai
 import logging
@@ -86,42 +92,36 @@ class AprilTagsUSBHost:
         self.tag_dictionary = TAG_DICTIONARY
         self.valid_tags = [t['ID'] for t in self.tag_dictionary['tags']]
 
-        self.latency = np.array([])
+        self.latency = np.array([0])
 
         for caminfo in cscore.UsbCamera.enumerateUsbCameras():
             print("%s: %s (%s)" % (caminfo.dev, caminfo.path, caminfo.name))
-            if caminfo.otherPaths:
-                print("Other device paths:")
-                for path in caminfo.otherPaths:
-                    print(" ", path)
+            device_name = caminfo.name
 
         # camera setup
-        device_name = "usb_camera"
         self.camera_params = generateOV2311CameraParameters(device_name)
         if platform.system() == 'linux':
-            self.camera = cv2.VideoCapture(1, cv2.CAP_V4L2)
+            self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
+            self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
+            self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
+            self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
+            self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
+            self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
+            self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
         else:
-            self.camera = cv2.VideoCapture(1, cv2.CAP_MSMF)
-        # self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
-        # self.camera.set(cv2.CAP_PROP_EXPOSURE, self.camera_params["exposure" ])
-        # self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
-        # self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
-        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
-        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
-        self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
+            self.camera = cscore.UsbCamera(self.camera_params["device_name"], 0)
+            settings = open("utils/{}.json".format("OV2311_1"))
+            jsonData = json.load(settings)
+            test = self.camera.setConfigJson(jsonData)
+            self.cvsink = cscore.CvSink("cvsink")
+            self.cvsink.setSource(self.camera)
 
         self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
         self.nt_apriltag_tab = self.NT_Instance.getTable(self.camera_params["nt_name"])
 
-        self.camera_stream = CSCoreServer(self.camera_params['device_name'])
-
-        # self.camera = cscore.UsbCamera(self.camera_params["device_name"], 1)
-        # self.camera.setVideoMode(self.camera_params["pixelFormat"], self.camera_params["height"], self.camera_params["width"], self.camera_params["fps"])
-        # self.camera.setConnectionStrategy(cscore.UsbCamera.ConnectionStrategy.kConnectionKeepOpen)
-        # self.camera.setExposureManual(150)
-        # self.camera.setBrightness(100)
-        # self.cvsink = cscore.CvSink("cvsink")
-        # self.cvsink.setSource(self.camera)
+        self.camera_stream = CSCoreServer(self.camera_params['device_name'], width=self.camera_params["width"], height=self.camera_params["height"], fps=self.camera_params["fps"])
 
         self.ip_address = 'localhost'
         self.port = 5800
@@ -149,6 +149,8 @@ class AprilTagsUSBHost:
 
         self.run_thread = None
 
+        self.lastTimestamp = 0
+
         self.camera_settings = None
         if not self.DISABLE_VIDEO_OUTPUT:
             from PyQt5 import QtWidgets
@@ -169,15 +171,24 @@ class AprilTagsUSBHost:
 
     def detect_apriltags(self):
         frame = np.zeros(shape=(self.camera_params["height"], self.camera_params["width"], 1), dtype=np.uint8)
-        timestamp = 0
         while True:
             if self.camera is not None:
-                retval, frame = self.camera.read()
-                if not retval:
-                    print("Capture session failed, restarting")
-                    self.camera.release()
-                    self.camera = None  # Force reconnect
-                    time.sleep(2)
+                if platform.system() == 'linux':
+                    retval, frame = self.camera.read()
+                    timestamp = time.time_ns()
+                    if not retval:
+                        print("Capture session failed, restarting")
+                        self.camera.release()
+                        self.camera = None  # Force reconnect
+                        time.sleep(2)
+                else:
+                    timestamp, frame = self.cvsink.grabFrame(frame)
+
+                    if time == 0:
+                        log.error(self.cvsink.getError())
+                        continue
+                    if len(frame.shape) > 2:
+                        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
                 self.process_results(frame, timestamp)
 
@@ -201,12 +212,8 @@ class AprilTagsUSBHost:
                 'yaw': math.radians(self.nt_drivetrain_tab.getNumber("Pitch", 0.0))
             }
 
-        if platform.system() == 'linux':
-            monoFrame = frame
-        else:
-            monoFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        monoFrame = frame
         fps = self.fps
-        timestamp = timestamp
         detector = self.detector
 
         fps.nextIter()
@@ -218,7 +225,6 @@ class AprilTagsUSBHost:
             self.ENABLE_SOLVEPNP = self.testGui.getSolvePnpEnabled()
 
             if self.testGui.getPauseResumeState():
-                depthFrame = self.lastDepthFrame
                 monoFrame = self.lastMonoFrame
 
         tags = detector.detect(monoFrame)
@@ -248,17 +254,42 @@ class AprilTagsUSBHost:
                 topLeftXY = (int(min(xPixels)), int(min(yPixels)))
                 bottomRightXY = (int(max(xPixels)), int(max(yPixels)))
 
-                roi = (topLeftXY[0], topLeftXY[1], bottomRightXY[0], bottomRightXY[1])
+                tagValues = self.tag_dictionary['tags'][tag.getId() - 1]['pose']
+                tagTranslation = tagValues['translation']
+                tagRotation = tagValues['rotation']['quaternion']
+                tagT3D = Translation3d(tagTranslation['x'], tagTranslation['y'], tagTranslation['z'])
+                tagR3D = Rotation3d(Quaternion(tagRotation['W'], tagRotation['X'], tagRotation['Y'], tagRotation['Z']))
+                tagPose = Pose3d(tagT3D, tagR3D)
+                tagTranslation = detector.estimatePose(tag)
 
-                tagDictionaryPose = self.tag_dictionary['tags'][tag.getId() - 1]['pose']['translation']
-                pnpRobotPose = detector.estimatePose(tag)
+                wpiTransform = CoordinateSystem.convert(tagTranslation.translation(),
+                                                        CoordinateSystem.EDN(),
+                                                        CoordinateSystem.NWU())
 
+                estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, tagTranslation.rotation()))
+
+                tagInfo = {
+                    "tag": tag,
+                    "corners": tagCorners,
+                    "topLeftXY": topLeftXY,
+                    "bottomRightXY": bottomRightXY,
+                    "tagTranslation": tagTranslation,
+                    "estimatedRobotPose": estimatedRobotPose
+                }
+
+                x_pos.append(estimatedRobotPose.translation().x)
+                y_pos.append(estimatedRobotPose.translation().y)
+                z_pos.append(estimatedRobotPose.translation().z)
+                pose_id.append(tag.getId())
+                detectedTags.append(tagInfo)
 
         fpsValue = self.fps.fps()
-        latencyMs = (0 - timestamp) * 1000.0
-        self.latency = np.append(self.latency, latencyMs)
+        if self.lastTimestamp != 0:
+            latencyMs = (timestamp - self.lastTimestamp) / 1000000.0
+            self.latency = np.append(self.latency, latencyMs)
         avgLatency = np.average(self.latency) if len(self.latency) < 100 else np.average(self.latency[-100:])
         latencyStd = np.std(self.latency) if len(self.latency) < 100 else np.std(self.latency[-100:])
+        self.lastTimestamp = timestamp
 
         self.nt_apriltag_tab.putNumberArray("tid", pose_id)
         self.nt_apriltag_tab.putNumberArray("X Poses", x_pos)
@@ -271,14 +302,10 @@ class AprilTagsUSBHost:
         log.info("Std dev X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(np.std(x_pos),
                                                                   np.std(y_pos),
                                                                   np.std(z_pos)))
-        self.nt_apriltag_tab.putNumber("Avg X Pose", np.average(x_pos))
-        self.nt_apriltag_tab.putNumber("Avg Y Pose", np.average(y_pos))
         self.nt_apriltag_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
         self.nt_apriltag_tab.putNumber("latency", self.latency[-1])
 
         self.nt_apriltag_tab.putNumberArray("PnP Pose ID", pnp_tag_id)
-        self.nt_apriltag_tab.putNumberArray("PnP X Poses", pnp_x_pos)
-        self.nt_apriltag_tab.putNumberArray("PnP Y Poses", pnp_y_pos)
         self.nt_apriltag_tab.putNumberArray("botpose", botPose)
 
         self.stats = {
@@ -306,12 +333,12 @@ class AprilTagsUSBHost:
                             (textX, textY), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
 
                 if self.ENABLE_SOLVEPNP:
-                    r_vec = np.array([detectedTag['tagPose'].rotation().x,
-                                      detectedTag['tagPose'].rotation().y,
-                                      detectedTag['tagPose'].rotation().z])
-                    t_vec = np.array([detectedTag['tagPose'].translation().x,
-                                      detectedTag['tagPose'].translation().y,
-                                      detectedTag['tagPose'].translation().z])
+                    r_vec = np.array([detectedTag['tagTranslation'].rotation().x,
+                                      detectedTag['tagTranslation'].rotation().y,
+                                      detectedTag['tagTranslation'].rotation().z])
+                    t_vec = np.array([detectedTag['tagTranslation'].translation().x,
+                                      detectedTag['tagTranslation'].translation().y,
+                                      detectedTag['tagTranslation'].translation().z])
                     ipoints, _ = cv2.projectPoints(constants.OPOINTS,
                                                    r_vec,
                                                    t_vec,
@@ -325,18 +352,12 @@ class AprilTagsUSBHost:
                     for i, j in constants.EDGES:
                         cv2.line(monoFrame, ipoints[i], ipoints[j], (0, 255, 0), 1, 16)
 
-                cv2.putText(monoFrame, "x: {:.2f}".format(detectedTag["spatialData"]['x']),
+                cv2.putText(monoFrame, "x: {:.2f}".format(detectedTag["tagTranslation"].translation().x),
                             (textX, textY + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                cv2.putText(monoFrame, "y: {:.2f}".format(detectedTag["spatialData"]['y']),
+                cv2.putText(monoFrame, "y: {:.2f}".format(detectedTag["tagTranslation"].translation().y),
                             (textX, textY + 40), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                cv2.putText(monoFrame, "x angle: {:.2f}".format(detectedTag["translation"]['x_angle']),
+                cv2.putText(monoFrame, "z: {:.2f}".format(detectedTag["tagTranslation"].translation().z),
                             (textX, textY + 60), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                cv2.putText(monoFrame, "y angle: {:.2f}".format(detectedTag["translation"]['y_angle']),
-                            (textX, textY + 80), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                cv2.putText(monoFrame, "z: {:.2f}".format(detectedTag["spatialData"]['z']),
-                            (textX, textY + 100), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                cv2.rectangle(monoFrame, detectedTag["topLeftXY"], detectedTag["bottomRightXY"],
-                              (0, 0, 0), 3)
 
             if not self.testGui.getPauseResumeState():
                 cv2.circle(monoFrame, (int(monoFrame.shape[1]/2), int(monoFrame.shape[0]/2)), 1, (255, 255, 255), 1)

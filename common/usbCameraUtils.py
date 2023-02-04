@@ -12,11 +12,7 @@ def generateOV2311CameraParameters(deviceID):
     device_params = constants.CAMERAS[device_type]
     deviceName = device_params['ids'][deviceID]
 
-    iMatrix = np.array([
-        [0, 0, 0],
-        [0, 0, 0],
-        [0, 0, 0]
-    ])
+    iMatrix = constants.CAMERA_PARAMS[deviceName]["camera_matrix"][deviceID]
 
     hfov = constants.CAMERA_PARAMS[deviceName]["mono"]["hfov"]
     vfov = constants.CAMERA_PARAMS[deviceName]["mono"]["vfov"]
@@ -31,9 +27,10 @@ def generateOV2311CameraParameters(deviceID):
         "height": constants.CAMERA_PARAMS[deviceName]["height"],
         "width": constants.CAMERA_PARAMS[deviceName]["width"],
         "fps": constants.CAMERA_PARAMS[deviceName]["fps"],
+        "pixelFormat": constants.CAMERA_PARAMS[deviceName]["pixelFormat"],
         "exposure_auto": 0,
         "exposure": 0.1,
-        "gain": 100,
+        "gain": 200,
         "mount_angle_radians": math.radians(device_params['mount_angle'][0]),
         "iMatrix": np.array(iMatrix).reshape(3, 3),
         # fx, fy, cx, cy
