@@ -73,7 +73,7 @@ def main():
     if args.image_directory:
         searchRegex = r"{}/*.jpg".format(args.image_directory)
         images = glob.glob(searchRegex)
-        
+
         for image in images:
             camera_calibration.process_frame(image, save=True)
     else:
