@@ -1,0 +1,6 @@
+#!/bin/sh
+### TYPE: upload-python
+pkill -f UsbHost
+export PYTHONUNBUFFERED=1
+cd /home/pi/ChargedUp2023DepthAI
+exec nohup /usr/bin/python3 aprilTags/UsbHost.py -t &

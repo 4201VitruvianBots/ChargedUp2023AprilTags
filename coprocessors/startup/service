@@ -1,0 +1,15 @@
+[Unit]
+Description=Camera Service
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+Environment=PERLLIB=/perl
+ExecStart=/usr/bin/sh /home/pi/runCamera
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

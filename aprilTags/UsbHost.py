@@ -1,16 +1,5 @@
 import argparse
 import copy
-import json
-import os
-import time
-
-import cscore
-from wpimath.geometry import Translation3d, Rotation3d, Pose3d, Quaternion, CoordinateSystem, Transform3d
-
-from cscore_utils.CSCoreCamera import CSCoreCamera
-
-os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
-
 import cv2
 import logging
 import math
@@ -18,7 +7,10 @@ import numpy as np
 from os.path import basename
 import socket
 import sys
-import platform
+
+from wpimath.geometry import Translation3d, Rotation3d, Pose3d, Quaternion, CoordinateSystem, Transform3d
+
+from cscore_utils.CSCoreCamera import CSCoreCamera
 
 from ntcore import NetworkTableInstance
 
@@ -47,14 +39,11 @@ parser.add_argument('-ds', dest='decode_sharpening', action="store", type=float,
                     help='decode_sharpening (default: 0.25)')
 parser.add_argument('-dd', dest='detector_debug', action="store", type=int, default=0,
                     help='AprilTag Detector debug mode (default: 0)')
-
 parser.add_argument('-pnp', dest='apriltag_pose', action="store_true", default=False,
                     help='Enable pupil_apriltags Detector Pose Estimation')
 parser.add_argument('-imu', dest='imu', action="store_true", default=False, help='Use external IMU')
 parser.add_argument('-r', dest='record_video', action="store_true", default=False, help='Record video data')
-
 parser.add_argument('-dic', dest='tag_dictionary', action="store", type=str, default='test', help='Set Tag Dictionary')
-
 parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Forward_Localizers', 'Rear_Localizers'])
 
 args = parser.parse_args()
@@ -150,27 +139,27 @@ class AprilTagsUSBHost:
                 self.run_thread.join()
 
     def detect_apriltags(self):
-        frame = np.zeros(shape=(self.camera_params["height"], self.camera_params["width"], 1), dtype=np.uint8)
+        # frame = np.zeros(shape=(self.camera_params["height"], self.camera_params["width"], 1), dtype=np.uint8)
         while True:
             if self.camera is not None:
-                if platform.system() == 'Linux':
-                    retval, frame = self.camera.read()
-                    timestamp = time.time_ns()
-                    if not retval:
-                        print("Capture session failed, restarting")
-                        self.camera.release()
-                        self.camera = None  # Force reconnect
-                        time.sleep(2)
-                        continue
-                    #frame = cv2.imdecode(frame, cv2.IMREAD_GRAYSCALE)
-                    log.info("Frame Shape: {}".format(frame.shape))
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-                    
-                    self.process_results(frame, timestamp)
-                else:
-                    timestamp, frame = self.camera.getFrame()
+                # if platform.system() == 'Linux':
+                #     retval, frame = self.camera.read()
+                #     timestamp = time.time_ns()
+                #     if not retval:
+                #         print("Capture session failed, restarting")
+                #         self.camera.release()
+                #         self.camera = None  # Force reconnect
+                #         time.sleep(2)
+                #         continue
+                #     #frame = cv2.imdecode(frame, cv2.IMREAD_GRAYSCALE)
+                #     log.info("Frame Shape: {}".format(frame.shape))
+                #     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                #
+                #     self.process_results(frame, timestamp)
+                # else:
+                timestamp, frame = self.camera.getFrame()
 
-                    self.process_results(frame, timestamp)
+                self.process_results(frame, timestamp)
             else:
                 self.cameraSetup()
             
@@ -411,24 +400,24 @@ class AprilTagsUSBHost:
         return NT_Instance
 
     def cameraSetup(self):
-        if platform.system() == 'Linux':
-            self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
-            self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
-            self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
-            self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
-            self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
-            self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
-            self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
-            #self.camera = cv2.VideoCapture("v4l2src device=/dev/video" + str(0) + 
-            #                               " extra_controls=\"c,exposure_auto=" + str(self.camera_params["exposure_auto"]) + 
-            #                               ",exposure_absolute=" + str(self.camera_params["exposure"]) + 
-            #                               ",gain=" + str(self.camera_params["gain"]) + 
-            #                               ",sharpness=0,brightness=0\" ! image/jpeg,format=MJPG,width=" + str(self.camera_params["width"]) + 
-            #                               ",height=" + str(self.camera_params["height"]) + " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
-        else:
-            self.camera = CSCoreCamera(self.camera_params["device_id"], True)
+        # if platform.system() == 'Linux':
+        #     self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
+        #     self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
+        #     self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
+        #     self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
+        #     self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
+        #     self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
+        #     self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
+        #     self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
+        #     self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
+        #     #self.camera = cv2.VideoCapture("v4l2src device=/dev/video" + str(0) +
+        #     #                               " extra_controls=\"c,exposure_auto=" + str(self.camera_params["exposure_auto"]) +
+        #     #                               ",exposure_absolute=" + str(self.camera_params["exposure"]) +
+        #     #                               ",gain=" + str(self.camera_params["gain"]) +
+        #     #                               ",sharpness=0,brightness=0\" ! image/jpeg,format=MJPG,width=" + str(self.camera_params["width"]) +
+        #     #                               ",height=" + str(self.camera_params["height"]) + " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
+        # else:
+        self.camera = CSCoreCamera(self.camera_params["device_id"], True)
     
 
 if __name__ == '__main__':
