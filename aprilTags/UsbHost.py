@@ -1,5 +1,8 @@
 import argparse
 import copy
+import platform
+import time
+
 import cv2
 import logging
 import math
@@ -10,6 +13,7 @@ import sys
 
 from wpimath.geometry import Translation3d, Rotation3d, Pose3d, Quaternion, CoordinateSystem, Transform3d
 
+from common.cvUtils import TargetDrawer, drawStats
 from cscore_utils.CSCoreCamera import CSCoreCamera
 
 from ntcore import NetworkTableInstance
@@ -67,8 +71,8 @@ class AprilTagsUSBHost:
         log.info("Starting AprilTag Detector")
 
         self.DISABLE_VIDEO_OUTPUT = args.test
-
-        self.ENABLE_SOLVEPNP = True
+        self.ENABLE_SOLVEPNP_VISUALIZATION = True
+        self.ENABL_LINUX_OPTIMIZATION = False
 
         self.valid_cameras = None
         if args.position is not None:
@@ -125,7 +129,7 @@ class AprilTagsUSBHost:
             from PyQt5 import QtWidgets
             from designer.debugWindow import DebugWindow
             self.app = QtWidgets.QApplication(sys.argv)
-            self.testGui = DebugWindow(self.gyro, self.ENABLE_SOLVEPNP)
+            self.testGui = DebugWindow(self.gyro, self.ENABLE_SOLVEPNP_VISUALIZATION)
             self.camera_settings = self.testGui.getCameraSettings()
             # app.exec_()
 
@@ -139,25 +143,25 @@ class AprilTagsUSBHost:
                 self.run_thread.join()
 
     def detect_apriltags(self):
-        # frame = np.zeros(shape=(self.camera_params["height"], self.camera_params["width"], 1), dtype=np.uint8)
+        frame = np.zeros(shape=(self.camera_params["height"], self.camera_params["width"], 1), dtype=np.uint8)
         while True:
             if self.camera is not None:
-                # if platform.system() == 'Linux':
-                #     retval, frame = self.camera.read()
-                #     timestamp = time.time_ns()
-                #     if not retval:
-                #         print("Capture session failed, restarting")
-                #         self.camera.release()
-                #         self.camera = None  # Force reconnect
-                #         time.sleep(2)
-                #         continue
-                #     #frame = cv2.imdecode(frame, cv2.IMREAD_GRAYSCALE)
-                #     log.info("Frame Shape: {}".format(frame.shape))
-                #     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-                #
-                #     self.process_results(frame, timestamp)
-                # else:
-                timestamp, frame = self.camera.getFrame()
+                if platform.system() == 'Linux' and self.ENABL_LINUX_OPTIMIZATION:
+                    retval, frame = self.camera.read()
+                    timestamp = time.time_ns()
+                    if not retval:
+                        print("Capture session failed, restarting")
+                        self.camera.release()
+                        self.camera = None  # Force reconnect
+                        time.sleep(2)
+                        continue
+                    #frame = cv2.imdecode(frame, cv2.IMREAD_GRAYSCALE)
+                    log.info("Frame Shape: {}".format(frame.shape))
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+
+                    self.process_results(frame, timestamp)
+                else:
+                    timestamp, frame = self.camera.getFrame()
 
                 self.process_results(frame, timestamp)
             else:
@@ -193,7 +197,7 @@ class AprilTagsUSBHost:
             pass
 
         if not self.DISABLE_VIDEO_OUTPUT:
-            self.ENABLE_SOLVEPNP = self.testGui.getSolvePnpEnabled()
+            self.ENABLE_SOLVEPNP_VISUALIZATION = self.testGui.getSolvePnpEnabled()
 
             if self.testGui.getPauseResumeState():
                 monoFrame = self.lastMonoFrame
@@ -296,44 +300,27 @@ class AprilTagsUSBHost:
         if not self.DISABLE_VIDEO_OUTPUT:
             for detectedTag in detectedTags:
                 points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
-                # Shift points since this is a snapshot
-                cv2.polylines(monoFrame, [points], True, (120, 120, 120), 3)
-                textX = min(points[:, 0])
-                textY = min(points[:, 1]) + 20
-                cv2.putText(monoFrame, "tag_id: {}".format(detectedTag['tag'].getId()),
-                            (textX, textY), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
 
-                if self.ENABLE_SOLVEPNP:
-                    r_vec = np.array([detectedTag['tagTranslation'].rotation().x,
-                                      detectedTag['tagTranslation'].rotation().y,
-                                      detectedTag['tagTranslation'].rotation().z])
-                    t_vec = np.array([detectedTag['tagTranslation'].translation().x,
-                                      detectedTag['tagTranslation'].translation().y,
-                                      detectedTag['tagTranslation'].translation().z])
-                    ipoints, _ = cv2.projectPoints(constants.OPOINTS,
-                                                   r_vec,
-                                                   t_vec,
-                                                   self.camera_params['iMatrix'],
-                                                   np.zeros(5))
+                targetDrawer = TargetDrawer(points)
+                targetDrawer.drawTargetLines(monoFrame)
 
-                    ipoints = np.round(ipoints).astype(int)
+                if self.ENABLE_SOLVEPNP_VISUALIZATION:
+                    targetDrawer.drawTargetBox(monoFrame, self.camera_params['iMatrix'], detectedTag["tagTranslation"])
 
-                    ipoints = [tuple(pt) for pt in ipoints.reshape(-1, 2)]
-
-                    for i, j in constants.EDGES:
-                        cv2.line(monoFrame, ipoints[i], ipoints[j], (0, 255, 0), 1, 16)
-
-                cv2.putText(monoFrame, "x: {:.2f}".format(detectedTag["tagTranslation"].translation().x),
-                            (textX, textY + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                cv2.putText(monoFrame, "y: {:.2f}".format(detectedTag["tagTranslation"].translation().y),
-                            (textX, textY + 40), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
-                cv2.putText(monoFrame, "z: {:.2f}".format(detectedTag["tagTranslation"].translation().z),
-                            (textX, textY + 60), cv2.FONT_HERSHEY_TRIPLEX, 0.6, (255, 255, 255))
+                targetDrawer.addText(monoFrame, "tag_id: {}".format(detectedTag['tag'].getId()))
+                targetDrawer.addText(monoFrame, "x: {:.2f}".format(detectedTag["tagTranslation"].translation().x))
+                targetDrawer.addText(monoFrame, "y: {:.2f}".format(detectedTag["tagTranslation"].translation().y))
+                targetDrawer.addText(monoFrame, "z: {:.2f}".format(detectedTag["tagTranslation"].translation().z))
+                targetDrawer.addText(monoFrame, "pitch: {:.2f}".format(detectedTag["tagTranslation"].rotation().x_degrees))
+                targetDrawer.addText(monoFrame, "roll: {:.2f}".format(detectedTag["tagTranslation"].rotation().y_degrees))
+                targetDrawer.addText(monoFrame, "yaw: {:.2f}".format(detectedTag["tagTranslation"].rotation().z_degrees))
 
             if not self.testGui.getPauseResumeState():
-                cv2.circle(monoFrame, (int(monoFrame.shape[1]/2), int(monoFrame.shape[0]/2)), 1, (255, 255, 255), 1)
-                cv2.putText(monoFrame, "FPS: {:.2f}".format(fpsValue), (0, 24), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
-                cv2.putText(monoFrame, "Latency: {:.2f}ms".format(avgLatency), (0, 50), cv2.FONT_HERSHEY_TRIPLEX, 1, (255, 255, 255))
+                statText = [
+                    "FPS: {:.2f}".format(fpsValue),
+                    "Latency: {:.2f}ms".format(avgLatency)
+                ]
+                drawStats(monoFrame, statText)
 
                 # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
                 # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
@@ -400,24 +387,24 @@ class AprilTagsUSBHost:
         return NT_Instance
 
     def cameraSetup(self):
-        # if platform.system() == 'Linux':
-        #     self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
-        #     self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
-        #     self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
-        #     self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
-        #     self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
-        #     self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
-        #     self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
-        #     self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
-        #     self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
-        #     #self.camera = cv2.VideoCapture("v4l2src device=/dev/video" + str(0) +
-        #     #                               " extra_controls=\"c,exposure_auto=" + str(self.camera_params["exposure_auto"]) +
-        #     #                               ",exposure_absolute=" + str(self.camera_params["exposure"]) +
-        #     #                               ",gain=" + str(self.camera_params["gain"]) +
-        #     #                               ",sharpness=0,brightness=0\" ! image/jpeg,format=MJPG,width=" + str(self.camera_params["width"]) +
-        #     #                               ",height=" + str(self.camera_params["height"]) + " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
-        # else:
-        self.camera = CSCoreCamera(self.camera_params["device_id"], True)
+        if platform.system() == 'Linux' and self.ENABL_LINUX_OPTIMIZATION:
+            self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
+            self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
+            self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
+            self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
+            self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
+            self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
+            self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
+            self.camera = cv2.VideoCapture("v4l2src device=/dev/video" + str(0) +
+                                          " extra_controls=\"c,exposure_auto=" + str(self.camera_params["exposure_auto"]) +
+                                          ",exposure_absolute=" + str(self.camera_params["exposure"]) +
+                                          ",gain=" + str(self.camera_params["gain"]) +
+                                          ",sharpness=0,brightness=0\" ! image/jpeg,format=MJPG,width=" + str(self.camera_params["width"]) +
+                                          ",height=" + str(self.camera_params["height"]) + " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
+        else:
+            self.camera = CSCoreCamera(self.camera_params["device_id"], True)
     
 
 if __name__ == '__main__':
