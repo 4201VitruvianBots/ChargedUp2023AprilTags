@@ -27,7 +27,7 @@ from common import constants
 from common import utils
 from cscore_utils.CSCoreServer import CSCoreServer
 from aprilTags.tag_dictionary import TAG_DICTIONARY
-from cscore_utils.usbCameraUtils import generateOV2311CameraParameters
+from cscore_utils.usbCameraUtils import generateCameraParameters
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', dest='debug', action="store_true", default=False, help='Start in Debug Mode')
@@ -95,7 +95,7 @@ class AprilTagsUSBHost:
         device_name = "OV2311_1"
 
         # camera setup
-        self.camera_params = generateOV2311CameraParameters(device_name)
+        self.camera_params = generateCameraParameters(device_name)
         self.cameraSetup()
         
         self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
@@ -364,6 +364,7 @@ class AprilTagsUSBHost:
         self.camera_stream.setFrame(monoFrame)
 
         key = cv2.waitKey(1)
+        key = cv2.waitKey(1)
         if key == ord('q'):
             raise StopIteration()
         elif key == ord(' '):
@@ -412,14 +413,6 @@ class AprilTagsUSBHost:
     def cameraSetup(self):
         if platform.system() == 'Linux':
             self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
-            self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
-            self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
-            self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
-            self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
-            self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
-            self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
             self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
             self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))

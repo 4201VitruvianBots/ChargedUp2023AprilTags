@@ -5,11 +5,11 @@ import numpy as np
 from common import constants
 
 
-def generateOV2311CameraParameters(deviceID):
-    device_type = 'Forward_Localizers'
+def generateCameraParameters(deviceID):
+    deviceType = 'Forward_Localizers'
     if deviceID in constants.CAMERAS['Rear_Localizers']['ids'].keys():
-        device_type = 'Rear_Localizers'
-    device_params = constants.CAMERAS[device_type]
+        deviceType = 'Rear_Localizers'
+    device_params = constants.CAMERAS[deviceType]
     deviceName = device_params['ids'][deviceID]
 
     iMatrix = constants.CAMERA_PARAMS[deviceName]["camera_matrix"][deviceID]
@@ -19,7 +19,8 @@ def generateOV2311CameraParameters(deviceID):
 
     camera_params = {
         "device_id": deviceID,
-        "device_type": "OV2311",
+        "device_name": deviceName,
+        "device_type": deviceType,
         "id": 0,
         "nt_name": device_params['nt_name'],
         "hfov": hfov,
