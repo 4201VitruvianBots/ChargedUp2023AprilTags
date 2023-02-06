@@ -1,0 +1,158 @@
+{
+    "team": 4201,
+    "cameras": [
+	{
+	    "name": "OV2311_1",
+	    "path": "/dev/video0",
+	    "pixel format": "mjpeg",
+	    "width": 1600,
+	    "height": 1200,
+	    "fps": 50,
+	    "brightness": 0,
+	    "white balance": 0,
+	    "exposure": 0,
+		"properties": [
+        {
+            "name": "raw_Brightness",
+            "value": 0
+        },
+        {
+            "name": "Brightness",
+            "value": 0
+        },
+        {
+            "name": "raw_Contrast",
+            "value": 0
+        },
+        {
+            "name": "Contrast",
+            "value": 10
+        },
+        {
+            "name": "raw_Hue",
+            "value": 0
+        },
+        {
+            "name": "Hue",
+            "value": 0
+        },
+        {
+            "name": "raw_Saturation",
+            "value": 0
+        },
+        {
+            "name": "Saturation",
+            "value": 0
+        },
+        {
+            "name": "raw_Sharpness",
+            "value": 0
+        },
+        {
+            "name": "Sharpness",
+            "value": 0
+        },
+        {
+            "name": "Gamma",
+            "value": 0
+        },
+        {
+            "name": "WhiteBalance",
+            "value": 0
+        },
+        {
+            "name": "BacklightCompensation",
+            "value": 0
+        },
+        {
+            "name": "raw_Gain",
+            "value": 0
+        },
+        {
+            "name": "Gain",
+            "value": 5
+        },
+        {
+            "name": "raw_Exposure",
+            "value": 0
+        },
+        {
+            "name": "Exposure",
+            "value": -8
+        }
+    ],
+		"stream": {
+			"properties": [
+				{
+					"name": "raw_Brightness",
+					"value": 0
+				},
+				{
+					"name": "Brightness",
+					"value": 0
+				},
+				{
+					"name": "raw_Contrast",
+					"value": 0
+				},
+				{
+					"name": "Contrast",
+					"value": 10
+				},
+				{
+					"name": "raw_Hue",
+					"value": 0
+				},
+				{
+					"name": "Hue",
+					"value": 0
+				},
+				{
+					"name": "raw_Saturation",
+					"value": 0
+				},
+				{
+					"name": "Saturation",
+					"value": 0
+				},
+				{
+					"name": "raw_Sharpness",
+					"value": 0
+				},
+				{
+					"name": "Sharpness",
+					"value": 0
+				},
+				{
+					"name": "Gamma",
+					"value": 0
+				},
+				{
+					"name": "WhiteBalance",
+					"value": 0
+				},
+				{
+					"name": "BacklightCompensation",
+					"value": 0
+				},
+				{
+					"name": "raw_Gain",
+					"value": 0
+				},
+				{
+					"name": "Gain",
+					"value": 5
+				},
+				{
+					"name": "raw_Exposure",
+					"value": 0
+				},
+				{
+					"name": "Exposure",
+					"value": -8
+				}
+			]
+		}
+	}
+	]
+}

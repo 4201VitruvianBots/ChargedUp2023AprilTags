@@ -404,7 +404,7 @@ class AprilTagsUSBHost:
                                           ",sharpness=0,brightness=0\" ! image/jpeg,format=MJPG,width=" + str(self.camera_params["width"]) +
                                           ",height=" + str(self.camera_params["height"]) + " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
         else:
-            self.camera = CSCoreCamera(self.camera_params["device_id"], True)
+            self.camera = CSCoreCamera(self.camera_params, True)
     
 
 if __name__ == '__main__':

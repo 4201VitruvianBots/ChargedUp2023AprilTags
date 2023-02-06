@@ -1,3 +1,4 @@
+import json
 import socket
 
 import cscore
@@ -31,7 +32,11 @@ class CSCoreServer:
             self.cvSource = cscore.CvSource("{}_cvsource".format(camera.getName()), cs.VideoMode.PixelFormat.kMJPEG, width, height, fps)
             self.mjpegServer = cs.MjpegServer(self.ip_address, self.port)
             self.mjpegServer.setSource(self.cvSource)
+            test = self.mjpegServer.setConfigJson(camera.getStreamSettings())
+            if not test:
+                log.warning("Camera {} stream config not applied".format(self.name))
             log.info("MJPEG Server started at {}:{}".format(self.mjpegServer.getListenAddress(), self.mjpegServer.getPort()))
+            cs.CameraServer.addServer(self.mjpegServer)
         except Exception as e:
             log.error("Error Creating MJPEG Server: {}".format(e))
 
