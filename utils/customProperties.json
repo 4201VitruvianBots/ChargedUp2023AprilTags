@@ -1,0 +1,10 @@
+[{"name":"connect_verbose","value":1},
+{"name":"contrast","value":50},
+{"name":"saturation","value":50},
+{"name":"hue","value":50},
+{"name":"gamma","value":100},
+{"name":"gain","value":0},
+{"name":"power_line_frequency","value":2},
+{"name":"sharpness","value":50},
+{"name":"backlight_compensation","value":1},
+{"name":"exposure_auto_priority","value":false}]

@@ -29,14 +29,18 @@ class CSCoreServer:
                 self.ip_address = ip
             self.port = port
 
-            self.cvSource = cscore.CvSource("{}_cvsource".format(camera.getName()), cs.VideoMode.PixelFormat.kMJPEG, width, height, fps)
             self.mjpegServer = cs.MjpegServer(self.ip_address, self.port)
-            self.mjpegServer.setSource(self.cvSource)
-            test = self.mjpegServer.setConfigJson(camera.getStreamSettings())
+            self.mjpegServer.setSource(camera.getCamera())
+            test = self.mjpegServer.setConfigJson(camera.getConfig())
             if not test:
                 log.warning("Camera {} stream config not applied".format(self.name))
             log.info("MJPEG Server started at {}:{}".format(self.mjpegServer.getListenAddress(), self.mjpegServer.getPort()))
+
+            self.cvSource = cscore.CvSource("{}_cvsource".format(camera.getName()), cs.VideoMode.PixelFormat.kMJPEG, width, height, fps)
+            self.cvMjpegServer = cs.MjpegServer(self.ip_address, self.port + 1)
+            self.cvMjpegServer.setSource(self.cvSource)
             cs.CameraServer.addServer(self.mjpegServer)
+            cs.CameraServer.addServer(self.cvMjpegServer)
         except Exception as e:
             log.error("Error Creating MJPEG Server: {}".format(e))
 

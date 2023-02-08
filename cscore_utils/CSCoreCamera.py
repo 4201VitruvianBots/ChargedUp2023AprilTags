@@ -23,15 +23,10 @@ class CSCoreCamera:
             if caminfo.name == self.name:
                 deviceId = caminfo.dev
         self.camera = cscore.UsbCamera(self.name, deviceId)
-        settings = open("utils/csSettings.json")
+        settings = open("utils/{}_config.json".format(self.name))
         self.jsonConfig = json.load(settings)
-        self.cameraSettings = self.jsonConfig["cameras"]
-        for settings in self.cameraSettings:
-            if settings["name"] == self.name:
-                self.cameraSettings = settings
-                self.streamSettings = settings["stream"]
 
-        test = self.camera.setConfigJson(self.cameraSettings)
+        test = self.camera.setConfigJson(self.jsonConfig)
         if not test:
             log.warning("Camera {} config not applied".format(self.name))
         self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
@@ -72,11 +67,14 @@ class CSCoreCamera:
     def getCvsink(self):
         return self.cvSink
 
+    def getCamera(self):
+        return self.camera
+
     def getName(self):
         return self.name
 
-    def getStreamSettings(self):
-        return self.streamSettings
+    def getConfig(self):
+        return self.jsonConfig
 
 
 if __name__ == '__main__':
