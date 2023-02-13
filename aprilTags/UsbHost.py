@@ -187,6 +187,11 @@ class AprilTagsUSBHost:
                 'yaw': math.radians(self.nt_drivetrain_tab.getNumber("Pitch", 0.0))
             }
 
+        cameraToRobotV = self.nt_apriltag_tab.getNumberArray("fLocalizerPosition", [0, 0, 0, 0, 0, 0])
+        cameraToRobotTransform = Transform3d(Translation3d(cameraToRobotV[0], cameraToRobotV[1], cameraToRobotV[2]),
+                                             Rotation3d(cameraToRobotV[3], cameraToRobotV[4], cameraToRobotV[5]),)
+
+
         monoFrame = frame
         fps = self.fps
         detector = self.detector
@@ -205,13 +210,15 @@ class AprilTagsUSBHost:
         tags = detector.detect(monoFrame)
 
         detectedTags = []
-        x_pos = []
-        y_pos = []
-        z_pos = []
-        pnp_tag_id = []
-        pnp_x_pos = []
-        pnp_y_pos = []
-        pose_id = []
+        robot_pose_x = []
+        robot_pose_y = []
+        robot_pose_z = []
+        robot_pose_yaw = []
+
+        tag_id = []
+        tag_pose_x = []
+        tag_pose_y = []
+        tag_pose_z = []
         if len(tags) > 0:
             for tag in tags:
                 if not self.DISABLE_VIDEO_OUTPUT:
@@ -241,22 +248,31 @@ class AprilTagsUSBHost:
                                                         CoordinateSystem.EDN(),
                                                         CoordinateSystem.NWU())
 
-                estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, tagTranslation.rotation()))
+                estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, tagTranslation.rotation())) \
+                                            .transformBy(cameraToRobotTransform.inverse())
 
                 tagInfo = {
                     "tag": tag,
                     "corners": tagCorners,
                     "topLeftXY": topLeftXY,
                     "bottomRightXY": bottomRightXY,
+                    "tagPose": tagPose,
                     "tagTranslation": tagTranslation,
                     "estimatedRobotPose": estimatedRobotPose
                 }
 
-                x_pos.append(estimatedRobotPose.translation().x)
-                y_pos.append(estimatedRobotPose.translation().y)
-                z_pos.append(estimatedRobotPose.translation().z)
-                pose_id.append(tag.getId())
                 detectedTags.append(tagInfo)
+
+        detectedTags = sorted(detectedTags, key=lambda d: d['tag'].getDecisionMargin(), reverse=True)
+        for detectedTag in detectedTags:
+            robot_pose_x.append(detectedTag["estimatedRobotPose"].translation().x)
+            robot_pose_y.append(detectedTag["estimatedRobotPose"].translation().y)
+            robot_pose_z.append(detectedTag["estimatedRobotPose"].translation().z)
+            robot_pose_yaw.append(detectedTag["estimatedRobotPose"].rotation().z)
+            tag_pose_x.append(detectedTag["tagPose"].translation().x)
+            tag_pose_y.append(detectedTag["tagPose"].translation().y)
+            tag_pose_z.append(detectedTag["tagPose"].translation().z)
+            tag_id.append(detectedTag["tag"].getId())
 
         fpsValue = self.fps.fps()
         if self.lastTimestamp != 0:
@@ -266,34 +282,60 @@ class AprilTagsUSBHost:
         latencyStd = np.std(self.latency) if len(self.latency) < 100 else np.std(self.latency[-100:])
         self.lastTimestamp = timestamp
 
-        self.nt_apriltag_tab.putNumberArray("tid", pose_id)
-        self.nt_apriltag_tab.putNumberArray("X Poses", x_pos)
-        self.nt_apriltag_tab.putNumberArray("Y Poses", y_pos)
-        self.nt_apriltag_tab.putNumberArray("Z Poses", z_pos)
-
         # Merge AprilTag measurements to estimate
-        botPose = [np.average(x_pos), np.average(y_pos), np.average(z_pos)]
-        log.info("Estimated Pose X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(botPose[0], botPose[1], botPose[2]))
-        log.info("Std dev X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(np.std(x_pos),
-                                                                  np.std(y_pos),
-                                                                  np.std(z_pos)))
+        # Strategy 1: Average all tags
+        # botPose = [np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z)]
+        # Strategy 2: Choose best tag by decision Margin
+        # if len(tag_id) > 0:
+        #     botPose = [robot_pose_x[0], robot_pose_y[0], robot_pose_z[0]]
+        #     log.info("Estimated Pose X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(botPose[0], botPose[1], botPose[2]))
+        # else:
+        #     botPose = []
+
+        # Strategy 3: Remove tags from list if they are outside tolerance
+        x_mean = np.mean(robot_pose_x)
+        y_mean = np.mean(robot_pose_y)
+        yaw_mean = np.mean(robot_pose_yaw)
+        x_std = np.std(robot_pose_x)
+        y_std = np.std(robot_pose_x)
+        yaw_std = np.std(robot_pose_yaw)
+        rm_idx = []
+        std_multiplier = 0.25
+        for pose_idx in range(len(robot_pose_x)):
+            if math.fabs(robot_pose_x[pose_idx] - x_mean) > x_std * std_multiplier:
+                rm_idx.append(pose_idx)
+            if math.fabs(robot_pose_y[pose_idx] - y_mean) > y_std * std_multiplier:
+                rm_idx.append(pose_idx)
+            if math.fabs(robot_pose_yaw[pose_idx] - yaw_mean) > yaw_std:
+                rm_idx.append(pose_idx)
+
+        rm_idx = np.unique(rm_idx)
+        tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
+        robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
+        robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
+        robot_pose_z = [i for j, i in enumerate(robot_pose_z) if j not in rm_idx]
+        robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
+        botPose = [np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z), 0, 0, np.average(robot_pose_yaw)]
+
+        log.info("Std dev X: {:.2f}\tY: {:.2f}".format(x_std, y_std))
+        self.nt_apriltag_tab.putNumberArray("tid", tag_id)
+        self.nt_apriltag_tab.putNumberArray("Robot Pose X", robot_pose_x)
+        self.nt_apriltag_tab.putNumberArray("Robot Pose Y", robot_pose_y)
+        self.nt_apriltag_tab.putNumberArray("Robot Pose Z", robot_pose_z)
+        self.nt_apriltag_tab.putNumberArray("Robot Pose Yaw", robot_pose_yaw)
+        self.nt_apriltag_tab.putNumberArray("Tag Pose X", tag_pose_x)
+        self.nt_apriltag_tab.putNumberArray("Tag Pose Y", tag_pose_y)
+        self.nt_apriltag_tab.putNumberArray("Tag Pose Z", tag_pose_z)
         self.nt_apriltag_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
         self.nt_apriltag_tab.putNumber("latency", self.latency[-1])
-
-        self.nt_apriltag_tab.putNumberArray("PnP Pose ID", pnp_tag_id)
         self.nt_apriltag_tab.putNumberArray("botpose", botPose)
 
         self.stats = {
             'numTags': len(detectedTags),
             'depthAI': {
-                'x_pos': x_pos,
-                'y_pos': y_pos,
-                'z_pos': z_pos,
-            },
-            'solvePnP': {
-                'x_pos': pnp_x_pos,
-                'y_pos': pnp_y_pos,
-                'z_pos': [0]
+                'robot_pose_x': robot_pose_x,
+                'robot_pose_y': robot_pose_y,
+                'robot_pose_z': robot_pose_z,
             }
         }
 
@@ -324,16 +366,16 @@ class AprilTagsUSBHost:
 
                 # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
                 # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
-                self.testGui.updateTagIds(pose_id)
+                self.testGui.updateTagIds(tag_id)
                 if len(detectedTags) > 0:
                     self.testGui.updateStatsValue(self.stats)
                 self.testGui.updateFrames(monoFrame, monoFrame)
         else:
             print('FPS: {:.2f}\tLatency: {:.2f} ms\tStd: {:.2f}'.format(fpsValue, avgLatency, latencyStd))
             print('DepthAI')
-            print('Tags: {}'.format(pose_id))
-            print("         Avg.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(x_pos), np.average(y_pos), np.average(z_pos)))
-            print("         Std.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(x_pos), np.average(y_pos), np.average(z_pos)))
+            print('Tags: {}'.format(tag_id))
+            print("         Avg.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z)))
+            print("         Std.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z)))
             # print("\033[2J", end='')
 
         self.lastMonoFrame = copy.copy(monoFrame)

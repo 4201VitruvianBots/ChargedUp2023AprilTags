@@ -87,19 +87,19 @@ class DebugWindow(QtWidgets.QWidget):
         if values is None:
             values = self.values
 
-        self.avgDepthXValue.setText("{:.04f}".format(np.average(values['depthAI']['x_pos']) * self.unitScale))
-        self.avgDepthYValue.setText("{:.04f}".format(np.average(values['depthAI']['y_pos']) * self.unitScale))
-        self.avgDepthZValue.setText("{:.04f}".format(np.average(values['depthAI']['z_pos']) * self.unitScale))
-        self.stdDepthXValue.setText("{:.04f}".format(np.std(values['depthAI']['x_pos']) * self.unitScale))
-        self.stdDepthYValue.setText("{:.04f}".format(np.std(values['depthAI']['y_pos']) * self.unitScale))
-        self.stdDepthZValue.setText("{:.04f}".format(np.std(values['depthAI']['z_pos']) * self.unitScale))
+        self.avgDepthXValue.setText("{:.04f}".format(np.average(values['depthAI']['robot_pose_x']) * self.unitScale))
+        self.avgDepthYValue.setText("{:.04f}".format(np.average(values['depthAI']['robot_pose_y']) * self.unitScale))
+        self.avgDepthZValue.setText("{:.04f}".format(np.average(values['depthAI']['robot_pose_z']) * self.unitScale))
+        self.stdDepthXValue.setText("{:.04f}".format(np.std(values['depthAI']['robot_pose_x']) * self.unitScale))
+        self.stdDepthYValue.setText("{:.04f}".format(np.std(values['depthAI']['robot_pose_y']) * self.unitScale))
+        self.stdDepthZValue.setText("{:.04f}".format(np.std(values['depthAI']['robot_pose_z']) * self.unitScale))
 
-        self.avgPnpXValue.setText("{:.04f}".format(np.average(values['solvePnP']['x_pos']) * self.unitScale))
-        self.avgPnpYValue.setText("{:.04f}".format(np.average(values['solvePnP']['y_pos']) * self.unitScale))
-        self.avgPnpZValue.setText("{:.04f}".format(np.average(values['solvePnP']['z_pos']) * self.unitScale))
-        self.stdPnpXValue.setText("{:.04f}".format(np.std(values['solvePnP']['x_pos']) * self.unitScale))
-        self.stdPnpYValue.setText("{:.04f}".format(np.std(values['solvePnP']['y_pos']) * self.unitScale))
-        self.stdPnpZValue.setText("{:.04f}".format(np.std(values['solvePnP']['z_pos']) * self.unitScale))
+        # self.avgPnpXValue.setText("{:.04f}".format(np.average(values['solvePnP']['x_pos']) * self.unitScale))
+        # self.avgPnpYValue.setText("{:.04f}".format(np.average(values['solvePnP']['y_pos']) * self.unitScale))
+        # self.avgPnpZValue.setText("{:.04f}".format(np.average(values['solvePnP']['z_pos']) * self.unitScale))
+        # self.stdPnpXValue.setText("{:.04f}".format(np.std(values['solvePnP']['x_pos']) * self.unitScale))
+        # self.stdPnpYValue.setText("{:.04f}".format(np.std(values['solvePnP']['y_pos']) * self.unitScale))
+        # self.stdPnpZValue.setText("{:.04f}".format(np.std(values['solvePnP']['z_pos']) * self.unitScale))
         self.values = values
 
     def updateFrames(self, monoFrame, depthFrame):

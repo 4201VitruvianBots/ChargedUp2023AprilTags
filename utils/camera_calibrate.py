@@ -4,12 +4,14 @@ import datetime
 import glob
 import os
 import platform
+import threading
 
 from typing import List
 
+import numpy as np
+
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 import cv2
-import numpy
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', dest='image_directory', action="store", type=str, help='Use images in given directory')
@@ -20,8 +22,8 @@ cap_props = [x for x in dir(cv2) if x.startswith('CAP_PROP_')]
 
 
 class CameraCalibrate:
-    _all_charuco_corners: List[numpy.ndarray] = []
-    _all_charuco_ids: List[numpy.ndarray] = []
+    _all_charuco_corners: List[np.ndarray] = []
+    _all_charuco_ids: List[np.ndarray] = []
     _imsize = None
 
     def __init__(self, device_name) -> None:
@@ -35,7 +37,7 @@ class CameraCalibrate:
 
     def process_frame(self, image: cv2.Mat, save: bool) -> None:
         # Get image size
-        if self._imsize == None:
+        if self._imsize is None:
             self._imsize = (image.shape[0], image.shape[1])
 
         # Detect tags
@@ -51,6 +53,9 @@ class CameraCalibrate:
                 self._all_charuco_corners.append(charucoCorners)
                 self._all_charuco_ids.append(charucoIds)
                 print("Saved calibration frame")
+            return True
+        else:
+            return False
 
     def finish(self) -> None:
         if len(self._all_charuco_corners) == 0:
@@ -75,95 +80,134 @@ class CameraCalibrate:
             print("ERROR: Calibration failed")
 
 
+class CVCamera:
+
+    def __init__(self, camera_id=0):
+        self.height = 1200
+        self.width = 1600
+        self.colorDepth = 3
+
+        self.camera = cv2.VideoCapture(camera_id, cv2.CAP_DSHOW)
+        self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+        self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+        self.camera.set(cv2.CAP_PROP_FORMAT, -1)
+        # self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
+        self.camera.set(cv2.CAP_PROP_FPS, 50)
+        # 1 Is manual, 3 is auto
+        self.camera.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+        self.camera.set(cv2.CAP_PROP_AUTOFOCUS, 0)
+        self.camera.set(cv2.CAP_PROP_AUTO_WB, 0)
+
+        self.camera.set(cv2.CAP_PROP_WB_TEMPERATURE, 0)
+        # camera.set(cv2.CAP_PROP_ISO_SPEED, 30)
+        self.camera.set(cv2.CAP_PROP_CONTRAST, 40)
+        self.camera.set(cv2.CAP_PROP_SATURATION, 0)
+        self.camera.set(cv2.CAP_PROP_GAMMA, 0)
+        self.camera.set(cv2.CAP_PROP_GAIN, 0)
+        self.camera.set(cv2.CAP_PROP_EXPOSURE, -9)
+        self.camera.set(cv2.CAP_PROP_FOCUS, 0)
+        self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
+        self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
+
+        self.current_prop_value = {}
+        for prop in cap_props:
+            self.current_prop_value[prop] = self.camera.get(getattr(cv2, prop))
+
+        self.frame = np.zeros([self.height, self.width, self.colorDepth], dtype=np.uint8)
+
+        t = threading.Thread(target=self.run, daemon=True)
+        t.start()
+
+    def run(self):
+        while True:
+            retVal, frame = self.camera.read(0)
+
+            if retVal:
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                self.frame = frame
+
+            # Double-check camera settings
+            if False:
+                for prop in cap_props:
+                    if self.current_prop_value[prop] != self.camera.get(getattr(cv2, prop)):
+                        print("WARNING: {} has changed".format(prop))
+
+    def getFrame(self):
+        return self.frame
+
+
 def main():
     camera_calibration = CameraCalibrate("OV2311_1")
 
     if args.image_directory:
-        print("Calibrating from exisiting images")
-        searchRegex = r"{}/*.jpg".format(args.image_directory)
-        images = glob.glob(searchRegex)
+        print("Calibrating from existing images")
+        if platform.system() == 'Windows':
+            dir = os.path.join(os.getcwd(), args.image_directory)
+        else:
+            dir = os.path.join(os.getcwd(), args.image_directory)
 
-        for image in images:
-            camera_calibration.process_frame(image, save=True)
+        searchRegex = r"{}/*.jpg".format(dir)
+        imageFiles = glob.glob(searchRegex)
+
+        for imageFile in imageFiles:
+            image = cv2.imread(imageFile)
+            retVal = camera_calibration.process_frame(image, save=True)
+            if not retVal:
+                print("warning: No corners found in image: {}".format(imageFile))
     else:
-        camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-        camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
-        camera.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)
-        camera.set(cv2.CAP_PROP_FORMAT, -1)
-        # camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
-        camera.set(cv2.CAP_PROP_FPS, 50)
-        camera.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0)
-        camera.set(cv2.CAP_PROP_AUTOFOCUS, 0)
-        camera.set(cv2.CAP_PROP_AUTO_WB, 0)
-        
-        camera.set(cv2.CAP_PROP_WB_TEMPERATURE, 0)
-        camera.set(cv2.CAP_PROP_ISO_SPEED, 30)
-        camera.set(cv2.CAP_PROP_CONTRAST, 0)
-        camera.set(cv2.CAP_PROP_SATURATION, 0)
-        camera.set(cv2.CAP_PROP_GAMMA, 0)
-        camera.set(cv2.CAP_PROP_GAIN, -1)
-        camera.set(cv2.CAP_PROP_EXPOSURE, -15)
-        camera.set(cv2.CAP_PROP_FOCUS, 0)
-        camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
-        camera.set(cv2.CAP_PROP_SHARPNESS, 0)
-
-        current_prop_value = {}
-        for prop in cap_props:
-            current_prop_value[prop] = camera.get(getattr(cv2, prop))
+        camera = CVCamera(0)
 
         maxSamples = 20
         sampleCount = 0
         waitForInput = False
 
         while sampleCount < maxSamples:
-            retVal, frame = camera.read(0)
+            rawFrame = camera.getFrame()
 
-            for prop in cap_props:
-                if current_prop_value[prop] != camera.get(getattr(cv2, prop)):
-                    print("WARNING: {} has changed".format(prop))
-
-            if retVal:
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-                cv2.imshow("Frame", frame)
-                # print("Exposure: {}\tWhite Balance: {}".format(camera.get(cv2.CAP_PROP_EXPOSURE), camera.get(cv2.CAP_PROP_WB_TEMPERATURE)))
-                key = cv2.waitKey(1)
-                if key == ord(' '):
+            cv2.imshow("Frame", rawFrame)
+            # print("Exposure: {}\tWhite Balance: {}".format(camera.get(cv2.CAP_PROP_EXPOSURE), camera.get(cv2.CAP_PROP_WB_TEMPERATURE)))
+            key = cv2.waitKey(1)
+            if key == ord(' '):
+                frame = rawFrame.copy()
+                retVal = camera_calibration.process_frame(frame, save=False)
+                if retVal:
                     print("Image Captured. Do you want to use it (S: Save)?")
                     waitForInput = True
-                    rawFrame = copy.copy(frame)
-                    camera_calibration.process_frame(frame, save=False)
+                else:
+                    print("No markers found")
+                    waitForInput = False
 
-                while waitForInput:
-                    key = cv2.waitKey(1)
-                    if key == ord('s'):
-                        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-                        if platform.system() == 'Windows':
-                            dir = os.path.join(os.getcwd(), "resources\\calibration_images")
-                        else:
-                            dir = os.path.join(os.getcwd(), "resources/calibration_images")
-                        if not os.path.isdir(dir):                            os.mkdir(dir)
-
-                        if platform.system() == 'Windows':
-                            filename = "{}\\{}{}.jpg".format(dir, timestamp, "OV2311_1")
-                            cv2.imwrite(filename, rawFrame)
-                        else:
-                            filename = "{}/{}-{}.jpg".format(dir, timestamp, "OV2311_1")
-                            cv2.imwrite(filename, rawFrame)
-                        print(filename)
-                        camera_calibration.process_frame(frame, save=True)
-                        sampleCount += 1
-                        waitForInput = False
-                        try:
-                            cv2.destroyWindow("Detection Results")
-                        except Exception as e:
-                            pass
-                    elif key == ord('r'):
-                        waitForInput = False
-                        try:
-                            cv2.destroyWindow("Detection Results")
-                        except Exception as e:
-                            pass
+            while waitForInput:
+                key = cv2.waitKey(1)
+                if key == ord('s'):
+                    timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                    if platform.system() == 'Windows':
+                        dir = os.path.join(os.getcwd(), "resources\\calibration_images")
                     else:
+                        dir = os.path.join(os.getcwd(), "resources/calibration_images")
+                    if not os.path.isdir(dir):
+                        os.mkdir(dir)
+
+                    if platform.system() == 'Windows':
+                        filename = "{}\\{}-{}.jpg".format(dir, timestamp, "OV2311_1")
+                        cv2.imwrite(filename, rawFrame)
+                    else:
+                        filename = "{}/{}-{}.jpg".format(dir, timestamp, "OV2311_1")
+                        cv2.imwrite(filename, rawFrame)
+                    print(filename)
+                    frame = rawFrame.copy()
+                    camera_calibration.process_frame(frame, save=True)
+                    sampleCount += 1
+                    waitForInput = False
+                    try:
+                        cv2.destroyWindow("Detection Results")
+                    except Exception as e:
+                        pass
+                elif key == ord('r'):
+                    waitForInput = False
+                    try:
+                        cv2.destroyWindow("Detection Results")
+                    except Exception as e:
                         pass
 
     camera_calibration.finish()

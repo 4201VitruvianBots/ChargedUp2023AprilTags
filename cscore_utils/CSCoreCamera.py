@@ -25,6 +25,8 @@ class CSCoreCamera:
         self.camera = cscore.UsbCamera(self.name, deviceId)
         settings = open("utils/{}_config.json".format(self.name))
         self.jsonConfig = json.load(settings)
+        control = open("utils/{}_control.json".format(self.name))
+        self.jsonControl = json.load(control)
 
         test = self.camera.setConfigJson(self.jsonConfig)
         if not test:
@@ -32,6 +34,9 @@ class CSCoreCamera:
         self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
 
         self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
+        # self.camera.setExposureAuto(0.25)
+        self.camera.setExposureManual(-9)
+        self.camera.setExposureHoldCurrent()
 
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)
@@ -75,6 +80,9 @@ class CSCoreCamera:
 
     def getConfig(self):
         return self.jsonConfig
+
+    def getControl(self):
+        return self.jsonControl
 
 
 if __name__ == '__main__':
