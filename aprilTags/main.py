@@ -48,7 +48,7 @@ parser.add_argument('-r', dest='record_video', action="store_true", default=Fals
 
 parser.add_argument('-dic', dest='tag_dictionary', action="store", type=str, default='test', help='Set Tag Dictionary')
 
-parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Forward_Localizers', 'Rear_Localizers'])
+parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Left_Localizers', 'Right_Localizers'])
 
 args = parser.parse_args()
 

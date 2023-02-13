@@ -48,7 +48,7 @@ parser.add_argument('-pnp', dest='apriltag_pose', action="store_true", default=F
 parser.add_argument('-imu', dest='imu', action="store_true", default=False, help='Use external IMU')
 parser.add_argument('-r', dest='record_video', action="store_true", default=False, help='Record video data')
 parser.add_argument('-dic', dest='tag_dictionary', action="store", type=str, default='test', help='Set Tag Dictionary')
-parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Forward_Localizers', 'Rear_Localizers'])
+parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Left_Localizers', 'Right_Localizers'])
 
 args = parser.parse_args()
 
@@ -91,7 +91,7 @@ class AprilTagsUSBHost:
         self.camera_params = generateCameraParameters(device_name)
         self.cameraSetup()
         
-        self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
+        self.nt_drivetrain_tab = self.NT_Instance.getTable("SmartDashboard")
         self.nt_apriltag_tab = self.NT_Instance.getTable(self.camera_params["nt_name"])
 
         self.camera_stream = CSCoreServer(self.camera, width=self.camera_params["width"], height=self.camera_params["height"], fps=self.camera_params["fps"])
@@ -182,9 +182,9 @@ class AprilTagsUSBHost:
                 pass
         else:
             robotAngles = {
-                'pitch': math.radians(self.nt_drivetrain_tab.getNumber("Yaw", 0.0)),
+                'pitch': math.radians(self.nt_drivetrain_tab.getNumber("Pitch", 0.0)),
                 'roll': math.radians(self.nt_drivetrain_tab.getNumber("Roll", 0.0)),
-                'yaw': math.radians(self.nt_drivetrain_tab.getNumber("Pitch", 0.0))
+                'yaw': math.radians(self.nt_drivetrain_tab.getNumber("Yaw", 0.0))
             }
 
         cameraToRobotV = self.nt_apriltag_tab.getNumberArray("fLocalizerPosition", [0, 0, 0, 0, 0, 0])
@@ -301,20 +301,21 @@ class AprilTagsUSBHost:
         yaw_std = np.std(robot_pose_yaw)
         rm_idx = []
         std_multiplier = 0.25
-        for pose_idx in range(len(robot_pose_x)):
-            if math.fabs(robot_pose_x[pose_idx] - x_mean) > x_std * std_multiplier:
-                rm_idx.append(pose_idx)
-            if math.fabs(robot_pose_y[pose_idx] - y_mean) > y_std * std_multiplier:
-                rm_idx.append(pose_idx)
-            if math.fabs(robot_pose_yaw[pose_idx] - yaw_mean) > yaw_std:
-                rm_idx.append(pose_idx)
+        if len(tag_id) > 1:
+            for pose_idx in range(len(tag_id)):
+                if math.fabs(robot_pose_x[pose_idx] - x_mean) > x_std * std_multiplier:
+                    rm_idx.append(pose_idx)
+                if math.fabs(robot_pose_y[pose_idx] - y_mean) > y_std * std_multiplier:
+                    rm_idx.append(pose_idx)
+                if math.fabs(robot_pose_yaw[pose_idx] - yaw_mean) > yaw_std:
+                    rm_idx.append(pose_idx)
 
-        rm_idx = np.unique(rm_idx)
-        tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
-        robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
-        robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
-        robot_pose_z = [i for j, i in enumerate(robot_pose_z) if j not in rm_idx]
-        robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
+            rm_idx = np.unique(rm_idx)
+            tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
+            robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
+            robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
+            robot_pose_z = [i for j, i in enumerate(robot_pose_z) if j not in rm_idx]
+            robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
         botPose = [np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z), 0, 0, np.average(robot_pose_yaw)]
 
         log.info("Std dev X: {:.2f}\tY: {:.2f}".format(x_std, y_std))

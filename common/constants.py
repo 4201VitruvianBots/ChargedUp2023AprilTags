@@ -5,12 +5,12 @@ TAG_SIZE_M = 0.1524
 PADDING_PERCENTAGE = 0.31
 
 CAMERAS = {
-    'Forward_Localizers': {
+    'Left_Localizers': {
         # X, Y Z
         'mount_offset': [0, 0, 0],
         # pitch, roll, yaw
         'mount_angle': [0, 0, 0],
-        'nt_name': 'fLocalizer',
+        'nt_name': 'lLocalizer',
         'ids': {
             '14442C10218CCCD200': 'OAK-D',
             '18443010B1FA0C1300': 'OAK-D Lite',
@@ -19,12 +19,12 @@ CAMERAS = {
             'OV2311_1': 'OV2311',
         }
     },
-    'Rear_Localizers': {
+    'Right_Localizers': {
         # X, Y Z
         'mount_offset': [0, 0, 0],
         # pitch, roll, yaw
         'mount_angle': [0, 0, 0],
-        'nt_name': 'depthai-r',
+        'nt_name': 'rLocalizer',
         'ids': {
             '1944301061F9721301': 'OAK-D Pro W PoE'
         }

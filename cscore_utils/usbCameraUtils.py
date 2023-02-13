@@ -6,9 +6,9 @@ from common import constants
 
 
 def generateCameraParameters(deviceID):
-    deviceType = 'Forward_Localizers'
-    if deviceID in constants.CAMERAS['Rear_Localizers']['ids'].keys():
-        deviceType = 'Rear_Localizers'
+    deviceType = 'Left_Localizers'
+    if deviceID in constants.CAMERAS['Right_Localizers']['ids'].keys():
+        deviceType = 'Right_Localizers'
     device_params = constants.CAMERAS[deviceType]
     deviceName = device_params['ids'][deviceID]
 

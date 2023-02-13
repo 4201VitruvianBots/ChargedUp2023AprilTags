@@ -22,9 +22,9 @@ def generateCameraParameters(pipeline, pipeline_info, device_info):
         eepromData = device.readCalibration().getEepromData()
         iMatrix = eepromData.cameraData.get(dai.CameraBoardSocket.RIGHT).intrinsicMatrix
 
-        device_type = 'Forward_Localizers'
-        if deviceID in constants.CAMERAS['Rear_Localizers']['ids'].keys():
-            device_type = 'Rear_Localizers'
+        device_type = 'Left_Localizers'
+        if deviceID in constants.CAMERAS['Right_Localizers']['ids'].keys():
+            device_type = 'Right_Localizers'
         device_params = constants.CAMERAS[device_type]
 
         deviceName = device_params['ids'][deviceID]
@@ -60,9 +60,9 @@ def generateDualMonoCameraParameters(pipeline, pipeline_info, device_info):
         iMatrixL = eepromData.cameraData.get(dai.CameraBoardSocket.LEFT).intrinsicMatrix
         iMatrixR = eepromData.cameraData.get(dai.CameraBoardSocket.RIGHT).intrinsicMatrix
 
-        device_type = 'Forward_Localizers'
-        if deviceID in constants.CAMERAS['Rear_Localizers']['ids'].keys():
-            device_type = 'Rear_Localizers'
+        device_type = 'Left_Localizers'
+        if deviceID in constants.CAMERAS['Right_Localizers']['ids'].keys():
+            device_type = 'Right_Localizers'
         device_params = constants.CAMERAS[device_type]
 
         deviceName = device_params['ids'][deviceID]
