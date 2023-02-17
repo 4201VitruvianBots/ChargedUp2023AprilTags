@@ -26,6 +26,9 @@ class CSCoreCamera:
                 deviceId = caminfo.dev
         self.camera = cscore.UsbCamera(self.name, deviceId)
 
+        self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"],
+                                 camera_params["fps"])
+        self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
         if platform.system() == 'Windows':
             settings = open("utils/{}_config.json".format(self.name))
             self.jsonConfig = json.load(settings)
@@ -35,9 +38,6 @@ class CSCoreCamera:
             test = self.camera.setConfigJson(self.jsonConfig)
             if not test:
                 log.warning("Camera {} config not applied".format(self.name))
-            self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
-
-            self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
             # self.camera.setExposureAuto(0.25)
             self.camera.setExposureManual(-9)
             self.camera.setExposureHoldCurrent()
