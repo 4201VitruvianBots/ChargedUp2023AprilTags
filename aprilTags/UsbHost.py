@@ -268,7 +268,7 @@ class AprilTagsUSBHost:
             robot_pose_x.append(detectedTag["estimatedRobotPose"].translation().x)
             robot_pose_y.append(detectedTag["estimatedRobotPose"].translation().y)
             robot_pose_z.append(detectedTag["estimatedRobotPose"].translation().z)
-            robot_pose_yaw.append(detectedTag["estimatedRobotPose"].rotation().z)
+            robot_pose_yaw.append(detectedTag["estimatedRobotPose"].rotation().y_degrees)
             tag_pose_x.append(detectedTag["tagPose"].translation().x)
             tag_pose_y.append(detectedTag["tagPose"].translation().y)
             tag_pose_z.append(detectedTag["tagPose"].translation().z)
@@ -355,8 +355,8 @@ class AprilTagsUSBHost:
                 targetDrawer.addText(monoFrame, "y: {:.2f}".format(detectedTag["tagTranslation"].translation().y))
                 targetDrawer.addText(monoFrame, "z: {:.2f}".format(detectedTag["tagTranslation"].translation().z))
                 targetDrawer.addText(monoFrame, "pitch: {:.2f}".format(detectedTag["tagTranslation"].rotation().x_degrees))
-                targetDrawer.addText(monoFrame, "roll: {:.2f}".format(detectedTag["tagTranslation"].rotation().y_degrees))
-                targetDrawer.addText(monoFrame, "yaw: {:.2f}".format(detectedTag["tagTranslation"].rotation().z_degrees))
+                targetDrawer.addText(monoFrame, "roll: {:.2f}".format(detectedTag["tagTranslation"].rotation().z_degrees))
+                targetDrawer.addText(monoFrame, "yaw: {:.2f}".format(detectedTag["tagTranslation"].rotation().y_degrees))
 
             if not self.testGui.getPauseResumeState():
                 statText = [
