@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import platform
 from threading import Thread
 
 import cscore
@@ -23,20 +25,24 @@ class CSCoreCamera:
             if caminfo.name == self.name:
                 deviceId = caminfo.dev
         self.camera = cscore.UsbCamera(self.name, deviceId)
-        settings = open("utils/{}_config.json".format(self.name))
-        self.jsonConfig = json.load(settings)
-        control = open("utils/{}_control.json".format(self.name))
-        self.jsonControl = json.load(control)
 
-        test = self.camera.setConfigJson(self.jsonConfig)
-        if not test:
-            log.warning("Camera {} config not applied".format(self.name))
-        self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
+        if platform.system() == 'Windows':
+            settings = open("utils/{}_config.json".format(self.name))
+            self.jsonConfig = json.load(settings)
+            control = open("utils/{}_control.json".format(self.name))
+            self.jsonControl = json.load(control)
 
-        self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
-        # self.camera.setExposureAuto(0.25)
-        self.camera.setExposureManual(-9)
-        self.camera.setExposureHoldCurrent()
+            test = self.camera.setConfigJson(self.jsonConfig)
+            if not test:
+                log.warning("Camera {} config not applied".format(self.name))
+            self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
+
+            self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
+            # self.camera.setExposureAuto(0.25)
+            self.camera.setExposureManual(-9)
+            self.camera.setExposureHoldCurrent()
+        else:
+            os.system("./coprocessors/startup/initCameraSettings.sh")
 
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)

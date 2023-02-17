@@ -31,10 +31,10 @@ class CSCoreServer:
 
             self.mjpegServer = cs.MjpegServer(self.ip_address, self.port)
             self.mjpegServer.setSource(camera.getCamera())
-            test = self.mjpegServer.setConfigJson(camera.getControl())
-            if not test:
-                log.warning("Camera {} stream config not applied".format(self.name))
-            log.info("MJPEG Server started at {}:{}".format(self.mjpegServer.getListenAddress(), self.mjpegServer.getPort()))
+            # test = self.mjpegServer.setConfigJson(camera.getControl())
+            # if not test:
+            #     log.warning("Camera {} stream config not applied".format(self.name))
+            # log.info("MJPEG Server started at {}:{}".format(self.mjpegServer.getListenAddress(), self.mjpegServer.getPort()))
 
             self.cvSource = cscore.CvSource("{}_cvsource".format(camera.getName()), cs.VideoMode.PixelFormat.kMJPEG, width, height, fps)
             self.cvMjpegServer = cs.MjpegServer(self.ip_address, self.port + 1)

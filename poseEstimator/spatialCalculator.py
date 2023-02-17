@@ -1,5 +1,6 @@
 import math
 import numpy as np
+from wpimath.geometry import Transform3d, CoordinateSystem, Translation3d, Rotation3d
 
 from common.mathUtils import euler_from_quaternion
 
@@ -73,29 +74,31 @@ class HostSpatialsCalc:
         spatials = {
             'z': averageDepth / 1000.0,
             'x': averageDepth * math.tan(angle_x) / 1000.0,
-            'y': -averageDepth * math.tan(angle_y) / 1000.0
+            'y': averageDepth * math.tan(angle_y) / 1000.0
         }
         camera_angle = self.mountAngle if robotAngles['pitch'] is None else robotAngles['pitch']
         xy_target_distance = math.cos(camera_angle + angle_y) * spatials['z']
 
         camera_yaw = 0 if robotAngles['yaw'] is None else robotAngles['yaw']
-        tag_translation = {
-            # In WPILib coordinates
-            'x': math.cos(angle_x + camera_yaw + (math.pi - tagEuler['yaw'])) * xy_target_distance,
-            'y': -math.sin(angle_x + camera_yaw + (math.pi - tagEuler['yaw'])) * xy_target_distance,
-            'z': math.sin(camera_angle + angle_y) * spatials['z'],
-            # In Camera orientation
-            'x_angle': math.degrees(angle_x),
-            'y_angle': math.degrees(angle_y)
-        }
+        # tagTranslation = {
+        #     # In WPILib coordinates
+        #     'x': math.cos(angle_x + camera_yaw + (math.pi - tagEuler['yaw'])) * xy_target_distance,
+        #     'y': -math.sin(angle_x + camera_yaw + (math.pi - tagEuler['yaw'])) * xy_target_distance,
+        #     'z': math.sin(camera_angle + angle_y) * spatials['z'],
+        #     # In Camera orientation
+        #     'x_angle': math.degrees(angle_x),
+        #     'y_angle': math.degrees(angle_y)
+        # }
+        tagTranslation = Translation3d(spatials['x'], spatials['y'], spatials['z'])
+        tagRotation = Rotation3d(angle_x, angle_y, camera_yaw)
 
-        robotPose = {
-            'x': tagPose['x'] - tag_translation['x'],
-            'y': tagPose['y'] - tag_translation['y'],
-            'z': tagPose['z'] - tag_translation['z']
-        }
+        wpiTransform = CoordinateSystem.convert(tagTranslation,
+                                                CoordinateSystem.EDN(),
+                                                CoordinateSystem.NWU())
 
-        return robotPose, tag_translation, spatials
+        robotPose = tagPose.transformBy(Transform3d(wpiTransform, tagRotation))
+
+        return robotPose, tagTranslation, spatials
 
 
 def estimate_robot_pose_from_apriltag(tag, spatialData, camera_params, tagDictionary, frame_shape):
