@@ -17,6 +17,7 @@
 v4l2-ctl --list-devices | grep "OV2311" -A1 | grep -v "OV2311" | while read -r DEV;
   v4l2-ctl -d $DEV -c brightness=0
   v4l2-ctl -d $DEV -c contrast=32
+  v4l2-ctl -d $DEV -c saturation=64
   v4l2-ctl -d $DEV -c hue=0
   v4l2-ctl -d $DEV -c white_balance_temperature_auto=1
   v4l2-ctl -d $DEV -c gamma=100
