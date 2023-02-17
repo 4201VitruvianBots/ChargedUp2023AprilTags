@@ -15,6 +15,8 @@
 #         exposure_auto_priority 0x009a0903 (bool)   : default=0 value=0
 
 v4l2-ctl --list-devices | grep "OV2311" -A1 | grep -v "OV2311" | while read -r DEV;
+  v4l2-ctl -d $DEV --set-fmt-video=width=1600,height=1200,pixelformat=MJPG
+  v4l2-ctl -d $DEV -p 50
   v4l2-ctl -d $DEV -c brightness=0
   v4l2-ctl -d $DEV -c contrast=32
   v4l2-ctl -d $DEV -c saturation=64
