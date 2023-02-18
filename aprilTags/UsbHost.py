@@ -43,12 +43,13 @@ parser.add_argument('-ds', dest='decode_sharpening', action="store", type=float,
                     help='decode_sharpening (default: 0.25)')
 parser.add_argument('-dd', dest='detector_debug', action="store", type=int, default=0,
                     help='AprilTag Detector debug mode (default: 0)')
-parser.add_argument('-pnp', dest='apriltag_pose', action="store_true", default=False,
-                    help='Enable pupil_apriltags Detector Pose Estimation')
 parser.add_argument('-imu', dest='imu', action="store_true", default=False, help='Use external IMU')
 parser.add_argument('-r', dest='record_video', action="store_true", default=False, help='Record video data')
 parser.add_argument('-dic', dest='tag_dictionary', action="store", type=str, default='test', help='Set Tag Dictionary')
 parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Left_Localizers', 'Right_Localizers'])
+parser.add_argument('-port', dest='ports', action="store", type=str, help='Set MJPEG Server Ports (default: 5800, 5801)', default="5800, 5801")
+parser.add_argument('-dev', dest='dev', action="store", type=str, help='Set Device Name (default: OV2311_1)', default="OV2311_1")
+
 
 args = parser.parse_args()
 
@@ -85,22 +86,21 @@ class AprilTagsUSBHost:
 
         self.latency = np.array([0])
 
-        device_name = "OV2311_1"
+        self.device_name = args.dev
+        self.mjpeg_server_ports = list(map(int, args.ports.split(",")))
 
         # camera setup
-        self.camera_params = generateCameraParameters(device_name)
+        self.camera_params = generateCameraParameters(self.device_name)
         self.cameraSetup()
         
         self.nt_drivetrain_tab = self.NT_Instance.getTable("SmartDashboard")
         self.nt_apriltag_tab = self.NT_Instance.getTable(self.camera_params["nt_name"])
 
-        self.camera_stream = CSCoreServer(self.camera, width=self.camera_params["width"], height=self.camera_params["height"], fps=self.camera_params["fps"])
-
-        self.ip_address = 'localhost'
-        self.port = 5800
-        # self.mjpegServer = cscore.MjpegServer(self.ip_address, self.port)
-        # self.mjpegServer.setSource(self.camera)
-        # log.info("MJPEG Server started at {}:{}".format(self.ip_address, self.port))
+        self.camera_stream = CSCoreServer(self.camera,
+                                          ports=self.mjpeg_server_ports,
+                                          width=self.camera_params["width"],
+                                          height=self.camera_params["height"],
+                                          fps=self.camera_params["fps"])
 
         self.detector = AprilTagDetector(args, self.camera_params)
 
@@ -156,7 +156,7 @@ class AprilTagsUSBHost:
                         time.sleep(2)
                         continue
                     #frame = cv2.imdecode(frame, cv2.IMREAD_GRAYSCALE)
-                    log.info("Frame Shape: {}".format(frame.shape))
+                    # log.info("Frame Shape: {}".format(frame.shape))
                     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
                     self.process_results(frame, timestamp)
@@ -165,6 +165,7 @@ class AprilTagsUSBHost:
 
                 self.process_results(frame, timestamp)
             else:
+                log.warning("Camera not found! Restarting camera init...")
                 self.cameraSetup()
             
     def process_results(self, frame, timestamp):
@@ -267,7 +268,6 @@ class AprilTagsUSBHost:
         for detectedTag in detectedTags:
             robot_pose_x.append(detectedTag["estimatedRobotPose"].translation().x)
             robot_pose_y.append(detectedTag["estimatedRobotPose"].translation().y)
-            robot_pose_z.append(detectedTag["estimatedRobotPose"].translation().z)
             robot_pose_yaw.append(detectedTag["estimatedRobotPose"].rotation().y_degrees)
             tag_pose_x.append(detectedTag["tagPose"].translation().x)
             tag_pose_y.append(detectedTag["tagPose"].translation().y)
@@ -300,7 +300,7 @@ class AprilTagsUSBHost:
         y_std = np.std(robot_pose_x)
         yaw_std = np.std(robot_pose_yaw)
         rm_idx = []
-        std_multiplier = 0.25
+        std_multiplier = 1.1
         if len(tag_id) > 1:
             for pose_idx in range(len(tag_id)):
                 if math.fabs(robot_pose_x[pose_idx] - x_mean) > x_std * std_multiplier:
@@ -314,22 +314,22 @@ class AprilTagsUSBHost:
             tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
             robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
             robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
-            robot_pose_z = [i for j, i in enumerate(robot_pose_z) if j not in rm_idx]
             robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
-        botPose = [np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z), 0, 0, np.average(robot_pose_yaw)]
 
-        log.info("Std dev X: {:.2f}\tY: {:.2f}".format(x_std, y_std))
-        self.nt_apriltag_tab.putNumberArray("tid", tag_id)
-        self.nt_apriltag_tab.putNumberArray("Robot Pose X", robot_pose_x)
-        self.nt_apriltag_tab.putNumberArray("Robot Pose Y", robot_pose_y)
-        self.nt_apriltag_tab.putNumberArray("Robot Pose Z", robot_pose_z)
-        self.nt_apriltag_tab.putNumberArray("Robot Pose Yaw", robot_pose_yaw)
-        self.nt_apriltag_tab.putNumberArray("Tag Pose X", tag_pose_x)
-        self.nt_apriltag_tab.putNumberArray("Tag Pose Y", tag_pose_y)
-        self.nt_apriltag_tab.putNumberArray("Tag Pose Z", tag_pose_z)
-        self.nt_apriltag_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
-        self.nt_apriltag_tab.putNumber("latency", self.latency[-1])
-        self.nt_apriltag_tab.putNumberArray("botpose", botPose)
+            botPose = [np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z),
+                       0, 0, np.average(robot_pose_yaw),
+                       self.latency[-1]]
+
+            log.info("Std dev X: {:.2f}\tY: {:.2f}".format(x_std, y_std))
+            self.nt_apriltag_tab.putNumberArray("tid", tag_id)
+            self.nt_apriltag_tab.putNumberArray("Robot Pose X", robot_pose_x)
+            self.nt_apriltag_tab.putNumberArray("Robot Pose Y", robot_pose_y)
+            self.nt_apriltag_tab.putNumberArray("Robot Pose Yaw", robot_pose_yaw)
+            self.nt_apriltag_tab.putNumberArray("Tag Pose X", tag_pose_x)
+            self.nt_apriltag_tab.putNumberArray("Tag Pose Y", tag_pose_y)
+            self.nt_apriltag_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
+            self.nt_apriltag_tab.putNumber("latency", self.latency[-1])
+            self.nt_apriltag_tab.putNumberArray("botpose", botPose)
 
         self.stats = {
             'numTags': len(detectedTags),
@@ -340,13 +340,13 @@ class AprilTagsUSBHost:
             }
         }
 
-        if not self.DISABLE_VIDEO_OUTPUT:
-            for detectedTag in detectedTags:
-                points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
+        for detectedTag in detectedTags:
+            points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
 
-                targetDrawer = TargetDrawer(points)
-                targetDrawer.drawTargetLines(monoFrame)
+            targetDrawer = TargetDrawer(points)
+            targetDrawer.drawTargetLines(monoFrame)
 
+            if not self.DISABLE_VIDEO_OUTPUT:
                 if self.ENABLE_SOLVEPNP_VISUALIZATION:
                     targetDrawer.drawTargetBox(monoFrame, self.camera_params['iMatrix'], detectedTag["tagTranslation"])
 
@@ -358,20 +358,21 @@ class AprilTagsUSBHost:
                 targetDrawer.addText(monoFrame, "roll: {:.2f}".format(detectedTag["tagTranslation"].rotation().z_degrees))
                 targetDrawer.addText(monoFrame, "yaw: {:.2f}".format(detectedTag["tagTranslation"].rotation().y_degrees))
 
-            if not self.testGui.getPauseResumeState():
-                statText = [
-                    "FPS: {:.2f}".format(fpsValue),
-                    "Latency: {:.2f}ms".format(avgLatency)
-                ]
-                drawStats(monoFrame, statText)
+        if not self.testGui.getPauseResumeState():
+            statText = [
+                "FPS: {:.2f}".format(fpsValue),
+                "Latency: {:.2f}ms".format(avgLatency)
+            ]
+            drawStats(monoFrame, statText)
 
-                # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
-                # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
-                self.testGui.updateTagIds(tag_id)
-                if len(detectedTags) > 0:
-                    self.testGui.updateStatsValue(self.stats)
-                self.testGui.updateFrames(monoFrame, monoFrame)
-        else:
+            # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
+            # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
+            self.testGui.updateTagIds(tag_id)
+            if len(detectedTags) > 0:
+                self.testGui.updateStatsValue(self.stats)
+            self.testGui.updateFrames(monoFrame, monoFrame)
+
+        if self.DISABLE_VIDEO_OUTPUT:
             print('FPS: {:.2f}\tLatency: {:.2f} ms\tStd: {:.2f}'.format(fpsValue, avgLatency, latencyStd))
             print('DepthAI')
             print('Tags: {}'.format(tag_id))
@@ -382,7 +383,6 @@ class AprilTagsUSBHost:
         self.lastMonoFrame = copy.copy(monoFrame)
         self.camera_stream.setFrame(monoFrame)
 
-        key = cv2.waitKey(1)
         key = cv2.waitKey(1)
         if key == ord('q'):
             raise StopIteration()

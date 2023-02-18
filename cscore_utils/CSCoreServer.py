@@ -16,7 +16,7 @@ log.setLevel(logging.DEBUG)
 
 class CSCoreServer:
 
-    def __init__(self, camera, ip=None, port=5800, width=640, height=400, fps=30):
+    def __init__(self, camera, ip=None, ports=[5800, 5801], width=640, height=400, fps=30):
         self.frame = np.zeros(shape=(height, width), dtype=np.uint8)
 
         try:
@@ -27,9 +27,25 @@ class CSCoreServer:
                 self.ip_address = s.getsockname()[0]
             else:
                 self.ip_address = ip
-            self.port = port
+            self.input_source = ports[0]
+            self.output_source = ports[1]
 
-            self.mjpegServer = cs.MjpegServer(self.ip_address, self.port)
+            # clear ports
+            try:
+                s1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s1.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s1.bind((self.ip_address, self.input_source))
+                s1.shutdown()
+
+                s2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s2.bind((self.ip_address, self.input_source))
+                s2.shutdown()
+
+            except Exception as e:
+                pass
+
+            self.mjpegServer = cs.MjpegServer(self.ip_address, self.input_source)
             self.mjpegServer.setSource(camera.getCamera())
             # test = self.mjpegServer.setConfigJson(camera.getControl())
             # if not test:
@@ -37,7 +53,7 @@ class CSCoreServer:
             # log.info("MJPEG Server started at {}:{}".format(self.mjpegServer.getListenAddress(), self.mjpegServer.getPort()))
 
             self.cvSource = cscore.CvSource("{}_cvsource".format(camera.getName()), cs.VideoMode.PixelFormat.kMJPEG, width, height, fps)
-            self.cvMjpegServer = cs.MjpegServer(self.ip_address, self.port + 1)
+            self.cvMjpegServer = cs.MjpegServer(self.ip_address, self.output_source)
             self.cvMjpegServer.setSource(self.cvSource)
             cs.CameraServer.addServer(self.mjpegServer)
             cs.CameraServer.addServer(self.cvMjpegServer)
@@ -51,7 +67,7 @@ class CSCoreServer:
         self.frame = frame
 
     def getServerLocation(self):
-        return "{}:{}".format(self.ip_address, self.port)
+        return "{}:{}".format(self.ip_address, self.input_source)
 
     def run(self):
         while True:

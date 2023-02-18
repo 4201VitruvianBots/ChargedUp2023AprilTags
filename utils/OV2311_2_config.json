@@ -1,0 +1,65 @@
+{
+    "fps": 50,
+    "height": 1200,
+    "pixel format": "mjpeg",
+    "controls": [
+        {
+            "name": "exposure_auto",
+            "id": "19",
+            "type": "8",
+            "min": "0",
+            "max": "3",
+            "step": "1",
+            "default": "1",
+            "value": "1",
+            "menu": {"0": "", "1": "Manual Mode", "2": "", "3": "Aperture Priority Mode"}
+        }
+    ],
+    "properties": [
+        {
+            "name": "exposure_auto",
+            "value": "0"
+        },
+        {
+            "name": "raw_Brightness",
+            "value": 0
+        },
+        {
+            "name": "raw_Contrast",
+            "value": 40
+        },
+        {
+            "name": "raw_Hue",
+            "value": 0
+        },
+        {
+            "name": "raw_Saturation",
+            "value": 0
+        },
+        {
+            "name": "raw_Sharpness",
+            "value": 0
+        },
+        {
+            "name": "Gamma",
+            "value": 0
+        },
+        {
+            "name": "WhiteBalance",
+            "value": 0
+        },
+        {
+            "name": "BacklightCompensation",
+            "value": 0
+        },
+        {
+            "name": "raw_Gain",
+            "value": 0
+        },
+        {
+            "name": "raw_Exposure",
+            "value": -9
+        }
+    ],
+    "width": 1600
+}
