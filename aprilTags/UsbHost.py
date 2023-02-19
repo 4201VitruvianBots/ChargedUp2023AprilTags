@@ -265,9 +265,7 @@ class AprilTagsUSBHost:
                                                         CoordinateSystem.EDN(),
                                                         CoordinateSystem.NWU())
 
-                wpiRotation = Rotation3d(tagTranslation.rotation().x, -tagTranslation.rotation().y, tagTranslation.rotation().z)
-
-                estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, wpiRotation)) \
+                estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform.translation(), tagTranslation.rotation())) \
                                             .transformBy(cameraToRobotTransform)
 
                 tagInfo = {
@@ -317,7 +315,7 @@ class AprilTagsUSBHost:
         x_std = np.std(robot_pose_x)
         y_std = np.std(robot_pose_x)
         yaw_std = np.std(robot_pose_yaw)
-        std_multiplier = 1.1
+        std_multiplier = 5
         rm_idx = []
         if len(tag_id) > 1:
             for pose_idx in range(len(tag_id)):
@@ -383,13 +381,13 @@ class AprilTagsUSBHost:
                 targetDrawer.addText(monoFrame, "roll: {:.2f}".format(detectedTag["tagTranslation"].rotation().z_degrees))
                 targetDrawer.addText(monoFrame, "yaw: {:.2f}".format(detectedTag["tagTranslation"].rotation().y_degrees))
 
-                # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
-                # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
-                # self.testGui.updateTagIds(tag_id)
-                # if len(detectedTags) > 0:
-                #     self.testGui.updateStatsValue(self.stats)
-                # self.testGui.updateFrames(monoFrame, monoFrame)
-
+        if self.DEBUG_VIDEO_OUTPUT:
+            # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
+            # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
+            self.testGui.updateTagIds(tag_id)
+            if len(detectedTags) > 0:
+                self.testGui.updateStatsValue(self.stats)
+            self.testGui.updateFrames(monoFrame, monoFrame)
         # if not self.DEBUG_VIDEO_OUTPUT:
         #     print('FPS: {:.2f}\tLatency: {:.2f} ms\tStd: {:.2f}'.format(fpsValue, avgLatency, latencyStd))
         #     print('DepthAI')

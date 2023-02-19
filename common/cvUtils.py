@@ -40,7 +40,7 @@ class TargetDrawer:
 
     def addText(self, frame, text, textThickness=1):
         # Draw white text over black text to make it easier to read
-        cv2.putText(frame, text, (self.textX, self.textY), cv2.FONT_HERSHEY_TRIPLEX, self.fontSize, (255, 255, 255), textThickness, 5)
+        cv2.putText(frame, text, (self.textX, self.textY), cv2.FONT_HERSHEY_TRIPLEX, self.fontSize, (0, 0, 0), textThickness + 1, 5)
         cv2.putText(frame, text, (self.textX, self.textY), cv2.FONT_HERSHEY_TRIPLEX, self.fontSize, self.fontColor, textThickness, 2)
         self.textY += self.fontIncrement
 
