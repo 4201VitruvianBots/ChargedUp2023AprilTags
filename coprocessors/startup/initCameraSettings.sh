@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/bash
 #                     brightness 0x00980900 (int)    : min=-64 max=64 step=1 default=0 value=0
 #                       contrast 0x00980901 (int)    : min=0 max=64 step=1 default=32 value=32
 #                     saturation 0x00980902 (int)    : min=0 max=128 step=1 default=64 value=64
@@ -14,21 +14,23 @@
 #              exposure_absolute 0x009a0902 (int)    : min=1 max=5000 step=1 default=157 value=157
 #         exposure_auto_priority 0x009a0903 (bool)   : default=0 value=0
 
-v4l2-ctl --list-devices | grep "OV2311" -A1 | grep -v "OV2311" | while read -r DEV;
-  v4l2-ctl -d $DEV --set-fmt-video=width=1600,height=1200,pixelformat=MJPG
-  v4l2-ctl -d $DEV -p 50
-  v4l2-ctl -d $DEV -c brightness=0
-  v4l2-ctl -d $DEV -c contrast=32
-  v4l2-ctl -d $DEV -c saturation=64
-  v4l2-ctl -d $DEV -c hue=0
-  v4l2-ctl -d $DEV -c white_balance_temperature_auto=1
-  v4l2-ctl -d $DEV -c gamma=100
-  v4l2-ctl -d $DEV -c gain=0
-  v4l2-ctl -d $DEV -c power_line_frequency=2
-#  v4l2-ctl -d $DEV -c white_balance_temperature=4600
-  v4l2-ctl -d $DEV -c sharpness=3
-  v4l2-ctl -d $DEV -c backlight_compensation=0
-  v4l2-ctl -d $DEV -c exposure_auto=1
-  v4l2-ctl -d $DEV -c exposure_absolute=157
-  v4l2-ctl -d $DEV -c exposure_auto_priority=0
+v4l2-ctl --list-devices | grep "OV2311" -A1 | grep -v "OV2311" | grep "/dev" | while read -r DEV; do
+  echo $DEV;
+  v4l2-ctl -d $DEV --set-fmt-video=width=1600,height=1200,pixelformat=MJPG;
+  v4l2-ctl -d $DEV -p 50;
+  v4l2-ctl -d $DEV -c brightness=0;
+  v4l2-ctl -d $DEV -c contrast=32;
+  v4l2-ctl -d $DEV -c saturation=64;
+  v4l2-ctl -d $DEV -c hue=0;
+  v4l2-ctl -d $DEV -c white_balance_temperature_auto=1;
+  v4l2-ctl -d $DEV -c gamma=100;
+  v4l2-ctl -d $DEV -c gain=0;
+  v4l2-ctl -d $DEV -c power_line_frequency=2;
+#  v4l2-ctl -d $DEV -c white_balance_temperature=4600;
+  v4l2-ctl -d $DEV -c sharpness=3;
+  v4l2-ctl -d $DEV -c backlight_compensation=0;
+  v4l2-ctl -d $DEV -c exposure_auto=1;
+  v4l2-ctl -d $DEV -c exposure_absolute=157;
+  v4l2-ctl -d $DEV -c exposure_auto_priority=0;
 done
+echo "Finished v4l2 camera setup"

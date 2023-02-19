@@ -142,7 +142,7 @@ class AprilTagsUSBHost:
         self.lastTimestamp = 0
 
         self.camera_settings = None
-        if not self.DEBUG_VIDEO_OUTPUT:
+        if self.DEBUG_VIDEO_OUTPUT:
             from PyQt5 import QtWidgets
             from designer.debugWindow import DebugWindow
             self.app = QtWidgets.QApplication(sys.argv)
@@ -192,7 +192,7 @@ class AprilTagsUSBHost:
                     'pitch': math.radians(self.gyro.get('pitch')),
                     'yaw': math.radians(self.gyro.get('yaw'))
                 }
-                if not self.DEBUG_VIDEO_OUTPUT:
+                if self.DEBUG_VIDEO_OUTPUT:
                     self.testGui.updateYawValue(math.degrees(-robotAngles['yaw']))
                     self.testGui.updatePitchValue(math.degrees(robotAngles['pitch']))
             except Exception as e:
@@ -207,8 +207,7 @@ class AprilTagsUSBHost:
 
         cameraToRobotV = self.nt_subs['camToRobotT3D'].get()
         cameraToRobotTransform = Transform3d(Translation3d(cameraToRobotV[0], cameraToRobotV[1], cameraToRobotV[2]),
-                                             Rotation3d(cameraToRobotV[3], cameraToRobotV[4], cameraToRobotV[5]),)
-
+                                             Rotation3d(cameraToRobotV[3], cameraToRobotV[4], cameraToRobotV[5]))
 
         monoFrame = frame
         fps = self.fps
@@ -219,7 +218,7 @@ class AprilTagsUSBHost:
             # print("\033[2J", end='')
             pass
 
-        if not self.DEBUG_VIDEO_OUTPUT:
+        if self.DEBUG_VIDEO_OUTPUT:
             self.ENABLE_SOLVEPNP_VISUALIZATION = self.testGui.getSolvePnpEnabled()
 
             if self.testGui.getPauseResumeState():
@@ -237,10 +236,9 @@ class AprilTagsUSBHost:
         tag_pose_x = []
         tag_pose_y = []
         tag_pose_z = []
-        botPose = [0, 0, 0, 0, 0, 0, 0]
         if len(tags) > 0:
             for tag in tags:
-                if not self.DEBUG_VIDEO_OUTPUT:
+                if self.DEBUG_VIDEO_OUTPUT:
                     if tag.getId() not in self.testGui.getTagFilter():
                         continue
                 if tag.getId() not in self.valid_tags:
@@ -263,12 +261,14 @@ class AprilTagsUSBHost:
                 tagPose = Pose3d(tagT3D, tagR3D)
                 tagTranslation = detector.estimatePose(tag)
 
-                wpiTransform = CoordinateSystem.convert(tagTranslation.translation(),
+                wpiTransform = CoordinateSystem.convert(tagTranslation,
                                                         CoordinateSystem.EDN(),
                                                         CoordinateSystem.NWU())
 
-                estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, tagTranslation.rotation())) \
-                                            .transformBy(cameraToRobotTransform.inverse())
+                wpiRotation = Rotation3d(tagTranslation.rotation().x, -tagTranslation.rotation().y, tagTranslation.rotation().z)
+
+                estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, wpiRotation)) \
+                                            .transformBy(cameraToRobotTransform)
 
                 tagInfo = {
                     "tag": tag,
@@ -334,7 +334,7 @@ class AprilTagsUSBHost:
         robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
         robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
 
-        botPose = [np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z),
+        botPose = [np.average(robot_pose_x), np.average(robot_pose_y), 0,
                    0, 0, np.average(robot_pose_yaw),
                    self.latency[-1]]
 
@@ -364,10 +364,17 @@ class AprilTagsUSBHost:
 
             targetDrawer = TargetDrawer(points)
             targetDrawer.drawTargetLines(monoFrame)
+
+            statText = [
+                "FPS: {:.2f}".format(fpsValue),
+                "Latency: {:.2f}ms".format(avgLatency)
+            ]
+            drawStats(monoFrame, statText)
+
             if self.ENABLE_SOLVEPNP_VISUALIZATION:
                 targetDrawer.drawTargetBox(monoFrame, self.camera_params['iMatrix'], detectedTag["tagTranslation"])
 
-            if not self.DEBUG_VIDEO_OUTPUT:
+            if self.DEBUG_VIDEO_OUTPUT:
                 targetDrawer.addText(monoFrame, "tag_id: {}".format(detectedTag['tag'].getId()))
                 targetDrawer.addText(monoFrame, "x: {:.2f}".format(detectedTag["tagTranslation"].translation().x))
                 targetDrawer.addText(monoFrame, "y: {:.2f}".format(detectedTag["tagTranslation"].translation().y))
@@ -376,26 +383,19 @@ class AprilTagsUSBHost:
                 targetDrawer.addText(monoFrame, "roll: {:.2f}".format(detectedTag["tagTranslation"].rotation().z_degrees))
                 targetDrawer.addText(monoFrame, "yaw: {:.2f}".format(detectedTag["tagTranslation"].rotation().y_degrees))
 
-        if not self.testGui.getPauseResumeState():
-            statText = [
-                "FPS: {:.2f}".format(fpsValue),
-                "Latency: {:.2f}ms".format(avgLatency)
-            ]
-            drawStats(monoFrame, statText)
+                # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
+                # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
+                # self.testGui.updateTagIds(tag_id)
+                # if len(detectedTags) > 0:
+                #     self.testGui.updateStatsValue(self.stats)
+                # self.testGui.updateFrames(monoFrame, monoFrame)
 
-            # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
-            # cv2.imshow(pipeline_info["depthQueue"], depthFrameColor)
-            self.testGui.updateTagIds(tag_id)
-            if len(detectedTags) > 0:
-                self.testGui.updateStatsValue(self.stats)
-            self.testGui.updateFrames(monoFrame, monoFrame)
-
-        if self.DEBUG_VIDEO_OUTPUT:
-            print('FPS: {:.2f}\tLatency: {:.2f} ms\tStd: {:.2f}'.format(fpsValue, avgLatency, latencyStd))
-            print('DepthAI')
-            print('Tags: {}'.format(tag_id))
-            print("         Avg.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z)))
-            print("         Std.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z)))
+        # if not self.DEBUG_VIDEO_OUTPUT:
+        #     print('FPS: {:.2f}\tLatency: {:.2f} ms\tStd: {:.2f}'.format(fpsValue, avgLatency, latencyStd))
+        #     print('DepthAI')
+        #     print('Tags: {}'.format(tag_id))
+        #     print("         Avg.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z)))
+        #     print("         Std.: {:.6f}\t{:.6f}\t{:.6f}".format(np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z)))
             # print("\033[2J", end='')
 
         self.lastMonoFrame = copy.copy(monoFrame)
@@ -408,7 +408,7 @@ class AprilTagsUSBHost:
             if self.gyro is not None:
                 self.gyro.resetAll()
 
-        if not self.DEBUG_VIDEO_OUTPUT:
+        if self.DEBUG_VIDEO_OUTPUT:
             if not self.testGui.isVisible():
                 pass
 
@@ -441,10 +441,10 @@ class AprilTagsUSBHost:
             if NT_Instance.isConnected():
                 log.info("Found NT Server at {}".format(secondaryIps[tries]))
                 break
+            tries += 1
             if tries >= len(secondaryIps):
                 log.error("Could not connect to NetworkTables...")
                 break
-            tries += 1
 
         return NT_Instance
 

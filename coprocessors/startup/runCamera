@@ -3,4 +3,6 @@
 pkill -f UsbHost
 export PYTHONUNBUFFERED=1
 cd /home/pi/ChargedUp2023DepthAI
-exec nohup /usr/bin/python3 aprilTags/UsbHost.py -t &
+exec ./coprocessors/startup/initCameraSettings.sh
+exec /usr/bin/python3 aprilTags/UsbHost.py -port 5800,5801 -dev OV2311_1 &
+exec /usr/bin/python3 aprilTags/UsbHost.py -port 5802,5803 -dev OV2311_2 &

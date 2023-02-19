@@ -41,8 +41,6 @@ class CSCoreCamera:
             # self.camera.setExposureAuto(0.25)
             self.camera.setExposureManual(-9)
             self.camera.setExposureHoldCurrent()
-        else:
-            os.system("./coprocessors/startup/initCameraSettings.sh")
 
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)
