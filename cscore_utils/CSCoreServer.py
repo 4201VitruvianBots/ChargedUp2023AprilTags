@@ -31,19 +31,19 @@ class CSCoreServer:
             self.output_source = ports[1]
 
             # clear ports
-            try:
-                s1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s1.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s1.bind((self.ip_address, self.input_source))
-                s1.shutdown()
-
-                s2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                s2.bind((self.ip_address, self.input_source))
-                s2.shutdown()
-
-            except Exception as e:
-                pass
+            # try:
+            #     s1 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            #     s1.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            #     s1.bind((self.ip_address, self.input_source))
+            #     s1.close()
+            #
+            #     s2 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            #     s2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            #     s2.bind((self.ip_address, self.input_source))
+            #     s2.close()
+            #
+            # except Exception as e:
+            #     pass
 
             self.mjpegServer = cs.MjpegServer(self.ip_address, self.input_source)
             self.mjpegServer.setSource(camera.getCamera())

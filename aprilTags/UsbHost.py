@@ -1,5 +1,6 @@
 import argparse
 import copy
+import os
 import platform
 import time
 
@@ -71,7 +72,7 @@ class AprilTagsUSBHost:
 
         log.info("Starting AprilTag Detector")
 
-        self.DISABLE_VIDEO_OUTPUT = args.test
+        self.DEBUG_VIDEO_OUTPUT = args.test
         self.ENABLE_SOLVEPNP_VISUALIZATION = True
         self.ENABL_LINUX_OPTIMIZATION = False
 
@@ -93,9 +94,25 @@ class AprilTagsUSBHost:
         self.camera_params = generateCameraParameters(self.device_name)
         self.cameraSetup()
         
-        self.nt_drivetrain_tab = self.NT_Instance.getTable("SmartDashboard")
+        self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
         self.nt_apriltag_tab = self.NT_Instance.getTable(self.camera_params["nt_name"])
-
+        self.nt_subs = {
+            'Pitch': self.nt_drivetrain_tab.getDoubleTopic("Pitch").subscribe(0),
+            'Roll': self.nt_drivetrain_tab.getDoubleTopic("Roll").subscribe(0),
+            'Yaw': self.nt_drivetrain_tab.getDoubleTopic("Yaw").subscribe(0),
+            'camToRobotT3D': self.nt_apriltag_tab.getDoubleArrayTopic("camToRobotT3D").subscribe([0, 0, 0, 0, 0, 0]),
+        }
+        self.nt_pubs = {
+            'tv': self.nt_apriltag_tab.getIntegerTopic("tv").publish(),
+            'tid': self.nt_apriltag_tab.getIntegerArrayTopic("tid").publish(),
+            'rPosX': self.nt_apriltag_tab.getDoubleArrayTopic("Robot Pose X").publish(),
+            'rPosY': self.nt_apriltag_tab.getDoubleArrayTopic("Robot Pose Y").publish(),
+            'rPosYaw': self.nt_apriltag_tab.getDoubleArrayTopic("Robot Pose Yaw").publish(),
+            'tPosX': self.nt_apriltag_tab.getDoubleArrayTopic("Tag Pose X").publish(),
+            'tPosY': self.nt_apriltag_tab.getDoubleArrayTopic("Tag Pose Y").publish(),
+            'latency': self.nt_apriltag_tab.getDoubleTopic("latency").publish(),
+            'botpose': self.nt_apriltag_tab.getDoubleArrayTopic("botpose").publish(),
+        }
         self.camera_stream = CSCoreServer(self.camera,
                                           ports=self.mjpeg_server_ports,
                                           width=self.camera_params["width"],
@@ -125,7 +142,7 @@ class AprilTagsUSBHost:
         self.lastTimestamp = 0
 
         self.camera_settings = None
-        if not self.DISABLE_VIDEO_OUTPUT:
+        if not self.DEBUG_VIDEO_OUTPUT:
             from PyQt5 import QtWidgets
             from designer.debugWindow import DebugWindow
             self.app = QtWidgets.QApplication(sys.argv)
@@ -175,7 +192,7 @@ class AprilTagsUSBHost:
                     'pitch': math.radians(self.gyro.get('pitch')),
                     'yaw': math.radians(self.gyro.get('yaw'))
                 }
-                if not self.DISABLE_VIDEO_OUTPUT:
+                if not self.DEBUG_VIDEO_OUTPUT:
                     self.testGui.updateYawValue(math.degrees(-robotAngles['yaw']))
                     self.testGui.updatePitchValue(math.degrees(robotAngles['pitch']))
             except Exception as e:
@@ -183,12 +200,12 @@ class AprilTagsUSBHost:
                 pass
         else:
             robotAngles = {
-                'pitch': math.radians(self.nt_drivetrain_tab.getNumber("Pitch", 0.0)),
-                'roll': math.radians(self.nt_drivetrain_tab.getNumber("Roll", 0.0)),
-                'yaw': math.radians(self.nt_drivetrain_tab.getNumber("Yaw", 0.0))
+                'pitch': math.radians(self.nt_subs['Pitch'].get()),
+                'roll': math.radians(self.nt_subs['Roll'].get()),
+                'yaw': math.radians(self.nt_subs['Yaw'].get())
             }
 
-        cameraToRobotV = self.nt_apriltag_tab.getNumberArray("fLocalizerPosition", [0, 0, 0, 0, 0, 0])
+        cameraToRobotV = self.nt_subs['camToRobotT3D'].get()
         cameraToRobotTransform = Transform3d(Translation3d(cameraToRobotV[0], cameraToRobotV[1], cameraToRobotV[2]),
                                              Rotation3d(cameraToRobotV[3], cameraToRobotV[4], cameraToRobotV[5]),)
 
@@ -198,11 +215,11 @@ class AprilTagsUSBHost:
         detector = self.detector
 
         fps.nextIter()
-        if self.DISABLE_VIDEO_OUTPUT:
+        if self.DEBUG_VIDEO_OUTPUT:
             # print("\033[2J", end='')
             pass
 
-        if not self.DISABLE_VIDEO_OUTPUT:
+        if not self.DEBUG_VIDEO_OUTPUT:
             self.ENABLE_SOLVEPNP_VISUALIZATION = self.testGui.getSolvePnpEnabled()
 
             if self.testGui.getPauseResumeState():
@@ -220,9 +237,10 @@ class AprilTagsUSBHost:
         tag_pose_x = []
         tag_pose_y = []
         tag_pose_z = []
+        botPose = [0, 0, 0, 0, 0, 0, 0]
         if len(tags) > 0:
             for tag in tags:
-                if not self.DISABLE_VIDEO_OUTPUT:
+                if not self.DEBUG_VIDEO_OUTPUT:
                     if tag.getId() not in self.testGui.getTagFilter():
                         continue
                 if tag.getId() not in self.valid_tags:
@@ -299,37 +317,38 @@ class AprilTagsUSBHost:
         x_std = np.std(robot_pose_x)
         y_std = np.std(robot_pose_x)
         yaw_std = np.std(robot_pose_yaw)
-        rm_idx = []
         std_multiplier = 1.1
+        rm_idx = []
         if len(tag_id) > 1:
             for pose_idx in range(len(tag_id)):
                 if math.fabs(robot_pose_x[pose_idx] - x_mean) > x_std * std_multiplier:
                     rm_idx.append(pose_idx)
                 if math.fabs(robot_pose_y[pose_idx] - y_mean) > y_std * std_multiplier:
                     rm_idx.append(pose_idx)
-                if math.fabs(robot_pose_yaw[pose_idx] - yaw_mean) > yaw_std:
+                if math.fabs(robot_pose_yaw[pose_idx] - yaw_mean) > yaw_std * std_multiplier:
                     rm_idx.append(pose_idx)
 
-            rm_idx = np.unique(rm_idx)
-            tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
-            robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
-            robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
-            robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
+        rm_idx = np.unique(rm_idx)
+        tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
+        robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
+        robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
+        robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
 
-            botPose = [np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z),
-                       0, 0, np.average(robot_pose_yaw),
-                       self.latency[-1]]
+        botPose = [np.average(robot_pose_x), np.average(robot_pose_y), np.average(robot_pose_z),
+                   0, 0, np.average(robot_pose_yaw),
+                   self.latency[-1]]
 
-            log.info("Std dev X: {:.2f}\tY: {:.2f}".format(x_std, y_std))
-            self.nt_apriltag_tab.putNumberArray("tid", tag_id)
-            self.nt_apriltag_tab.putNumberArray("Robot Pose X", robot_pose_x)
-            self.nt_apriltag_tab.putNumberArray("Robot Pose Y", robot_pose_y)
-            self.nt_apriltag_tab.putNumberArray("Robot Pose Yaw", robot_pose_yaw)
-            self.nt_apriltag_tab.putNumberArray("Tag Pose X", tag_pose_x)
-            self.nt_apriltag_tab.putNumberArray("Tag Pose Y", tag_pose_y)
-            self.nt_apriltag_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
-            self.nt_apriltag_tab.putNumber("latency", self.latency[-1])
-            self.nt_apriltag_tab.putNumberArray("botpose", botPose)
+        log.info("Std dev X: {:.2f}\tY: {:.2f}".format(x_std, y_std))
+        self.nt_pubs["tv"].set(1 if len(tag_id) > 0 else 0)
+        self.nt_pubs["tid"].set(tag_id)
+        self.nt_pubs["rPosX"].set(robot_pose_x)
+        self.nt_pubs["rPosY"].set(robot_pose_y)
+        self.nt_pubs["rPosYaw"].set(robot_pose_yaw)
+        self.nt_pubs["tPosX"].set(tag_pose_x)
+        self.nt_pubs["tPosY"].set(tag_pose_y)
+        # self.nt_apriltag_tab.putNumber("Heading Pose", 0 if robotAngles['yaw'] is None else robotAngles['yaw'])
+        self.nt_pubs["latency"].set(self.latency[-1])
+        self.nt_pubs["botpose"].set(botPose)
 
         self.stats = {
             'numTags': len(detectedTags),
@@ -345,11 +364,10 @@ class AprilTagsUSBHost:
 
             targetDrawer = TargetDrawer(points)
             targetDrawer.drawTargetLines(monoFrame)
+            if self.ENABLE_SOLVEPNP_VISUALIZATION:
+                targetDrawer.drawTargetBox(monoFrame, self.camera_params['iMatrix'], detectedTag["tagTranslation"])
 
-            if not self.DISABLE_VIDEO_OUTPUT:
-                if self.ENABLE_SOLVEPNP_VISUALIZATION:
-                    targetDrawer.drawTargetBox(monoFrame, self.camera_params['iMatrix'], detectedTag["tagTranslation"])
-
+            if not self.DEBUG_VIDEO_OUTPUT:
                 targetDrawer.addText(monoFrame, "tag_id: {}".format(detectedTag['tag'].getId()))
                 targetDrawer.addText(monoFrame, "x: {:.2f}".format(detectedTag["tagTranslation"].translation().x))
                 targetDrawer.addText(monoFrame, "y: {:.2f}".format(detectedTag["tagTranslation"].translation().y))
@@ -372,7 +390,7 @@ class AprilTagsUSBHost:
                 self.testGui.updateStatsValue(self.stats)
             self.testGui.updateFrames(monoFrame, monoFrame)
 
-        if self.DISABLE_VIDEO_OUTPUT:
+        if self.DEBUG_VIDEO_OUTPUT:
             print('FPS: {:.2f}\tLatency: {:.2f} ms\tStd: {:.2f}'.format(fpsValue, avgLatency, latencyStd))
             print('DepthAI')
             print('Tags: {}'.format(tag_id))
@@ -390,13 +408,13 @@ class AprilTagsUSBHost:
             if self.gyro is not None:
                 self.gyro.resetAll()
 
-        if not self.DISABLE_VIDEO_OUTPUT:
+        if not self.DEBUG_VIDEO_OUTPUT:
             if not self.testGui.isVisible():
                 pass
 
     def init_networktables(self):
         NT_Instance = NetworkTableInstance.getDefault()
-        identity = basename(__file__)
+        identity = f"{basename(__file__)}-{os.getpid()}"
         NT_Instance.startClient4(identity)
         NT_Instance.setServer("10.42.1.2")
         hostname = socket.gethostname()
@@ -414,23 +432,24 @@ class AprilTagsUSBHost:
                 # '169.254.254.200'
             ]
         tries = 0
+        time.sleep(1)
         while not NT_Instance.isConnected():
             log.debug("Could not connect to team client. Trying other addresses...")
             NT_Instance.setServer(secondaryIps[tries])
-            tries = tries + 1
 
-            if tries >= len(secondaryIps):
+            time.sleep(1)
+            if NT_Instance.isConnected():
+                log.info("Found NT Server at {}".format(secondaryIps[tries]))
                 break
-
-        if NT_Instance.isConnected():
-            log.info("NT Connected to {}".format(NT_Instance.getConnections()))
-        else:
-            log.error("Could not connect to NetworkTables. Restarting server...")
+            if tries >= len(secondaryIps):
+                log.error("Could not connect to NetworkTables...")
+                break
+            tries += 1
 
         return NT_Instance
 
     def cameraSetup(self):
-        # if platform.system() == 'Linux' and self.ENABL_LINUX_OPTIMIZATION:
+        # if platform.system() == 'Linux' and self.ENABLE_LINUX_OPTIMIZATION:
         #     self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
         #     self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
         #     self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
