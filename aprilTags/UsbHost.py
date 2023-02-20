@@ -59,6 +59,15 @@ c_handler = logging.StreamHandler()
 log.addHandler(c_handler)
 log.setLevel(logging.INFO)
 
+# https://github.com/PhotonVision/photonvision/blob/cf68f2a450072a0d37d8a171c059698f10325ab1/photon-core/src/main/java/org/photonvision/common/util/math/MathUtils.java#L172
+WPILIB_BASE_ROTATION = Rotation3d(np.array([
+    [0, 1, 0],
+    [0, 0, 1],
+    [1, 0, 0]
+]))
+
+APRILTAG_BASE_ROTATION = Rotation3d(np.array([1, 0, 0]), math.radians(180))
+
 
 class AprilTagsUSBHost:
     initialized = False
@@ -259,26 +268,31 @@ class AprilTagsUSBHost:
                 tagT3D = Translation3d(tagTranslation['x'], tagTranslation['y'], tagTranslation['z'])
                 tagR3D = Rotation3d(Quaternion(tagRotation['W'], tagRotation['X'], tagRotation['Y'], tagRotation['Z']))
                 tagPose = Pose3d(tagT3D, tagR3D)
-                tagTranslation = detector.estimatePose(tag)
+                cameraToTagEstimate = detector.estimatePose(tag)
 
-                wpiTransform = CoordinateSystem.convert(tagTranslation,
+                wpiTranslation = CoordinateSystem.convert(cameraToTagEstimate.translation().rotateBy(cameraToTagEstimate.inverse().rotation()),
                                                         CoordinateSystem.EDN(),
                                                         CoordinateSystem.NWU())
+                # wpiTransform = Transform3d(wpiTranslation, cameraToTagEstimate.rotation())
+                # estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, WPILIB_BASE_ROTATION.rotateBy(tagTranslation.rotation()))) \
+                #                             .transformBy(cameraToRobotTransform)
+                # estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, tagTranslation.rotation())) \
+                #                             .transformBy(cameraToRobotTransform)
+                estimatedRobotTransform = tagPose.transformBy(Transform3d(wpiTranslation, Rotation3d())).transformBy(cameraToRobotTransform)
+                estimatedRobotPose = Pose3d(estimatedRobotTransform.translation(), cameraToTagEstimate.rotation())
 
-                estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform.translation(), tagTranslation.rotation())) \
-                                            .transformBy(cameraToRobotTransform)
-
-                tagInfo = {
+                detectedTag = {
                     "tag": tag,
                     "corners": tagCorners,
                     "topLeftXY": topLeftXY,
                     "bottomRightXY": bottomRightXY,
                     "tagPose": tagPose,
-                    "tagTranslation": tagTranslation,
+                    "tagTranslation": cameraToTagEstimate,
+                    "wpiCameraToTag": estimatedRobotTransform,
                     "estimatedRobotPose": estimatedRobotPose
                 }
 
-                detectedTags.append(tagInfo)
+                detectedTags.append(detectedTag)
 
         detectedTags = sorted(detectedTags, key=lambda d: d['tag'].getDecisionMargin(), reverse=True)
         for detectedTag in detectedTags:
@@ -306,7 +320,7 @@ class AprilTagsUSBHost:
         #     botPose = [robot_pose_x[0], robot_pose_y[0], robot_pose_z[0]]
         #     log.info("Estimated Pose X: {:.2f}\tY: {:.2f}\tZ: {:.2f}".format(botPose[0], botPose[1], botPose[2]))
         # else:
-        #     botPose = []
+        #     botPose =
 
         # Strategy 3: Remove tags from list if they are outside tolerance
         x_mean = np.mean(robot_pose_x)
@@ -315,9 +329,16 @@ class AprilTagsUSBHost:
         x_std = np.std(robot_pose_x)
         y_std = np.std(robot_pose_x)
         yaw_std = np.std(robot_pose_yaw)
-        std_multiplier = 5
+        std_multiplier = 1.1
         rm_idx = []
         if len(tag_id) > 1:
+            if math.fabs(robot_pose_x[0] - robot_pose_x[1]) > 0.05:
+                rm_idx = [0, 1]
+            if math.fabs(robot_pose_y[0] - robot_pose_y[1]) > 0.05:
+                rm_idx = [0, 1]
+            if math.fabs(robot_pose_yaw[0] - robot_pose_yaw[1]) > 1:
+                rm_idx = [0, 1]
+        elif len(tag_id) > 2:
             for pose_idx in range(len(tag_id)):
                 if math.fabs(robot_pose_x[pose_idx] - x_mean) > x_std * std_multiplier:
                     rm_idx.append(pose_idx)
@@ -374,12 +395,34 @@ class AprilTagsUSBHost:
 
             if self.DEBUG_VIDEO_OUTPUT:
                 targetDrawer.addText(monoFrame, "tag_id: {}".format(detectedTag['tag'].getId()))
-                targetDrawer.addText(monoFrame, "x: {:.2f}".format(detectedTag["tagTranslation"].translation().x))
-                targetDrawer.addText(monoFrame, "y: {:.2f}".format(detectedTag["tagTranslation"].translation().y))
-                targetDrawer.addText(monoFrame, "z: {:.2f}".format(detectedTag["tagTranslation"].translation().z))
-                targetDrawer.addText(monoFrame, "pitch: {:.2f}".format(detectedTag["tagTranslation"].rotation().x_degrees))
-                targetDrawer.addText(monoFrame, "roll: {:.2f}".format(detectedTag["tagTranslation"].rotation().z_degrees))
-                targetDrawer.addText(monoFrame, "yaw: {:.2f}".format(detectedTag["tagTranslation"].rotation().y_degrees))
+                targetDrawer.addText(monoFrame, "camTag-T: ({:.2f}, {:.2f} {:.2f})".format(
+                    detectedTag["tagTranslation"].translation().x,
+                    detectedTag["tagTranslation"].translation().y,
+                    detectedTag["tagTranslation"].translation().z))
+                targetDrawer.addText(monoFrame, "camTag-R: ({:.2f}, {:.2f} {:.2f})".format(
+                    detectedTag["tagTranslation"].rotation().x_degrees,
+                    detectedTag["tagTranslation"].rotation().y_degrees,
+                    detectedTag["tagTranslation"].rotation().z_degrees))
+                targetDrawer.addText(monoFrame, "wpiTag-T: ({:.2f}, {:.2f} {:.2f})".format(
+                    detectedTag["wpiCameraToTag"].translation().x,
+                    detectedTag["wpiCameraToTag"].translation().y,
+                    detectedTag["wpiCameraToTag"].translation().z))
+                targetDrawer.addText(monoFrame, "wpiTag-R: ({:.2f}, {:.2f} {:.2f})".format(
+                    detectedTag["wpiCameraToTag"].rotation().x_degrees,
+                    detectedTag["wpiCameraToTag"].rotation().y_degrees,
+                    detectedTag["wpiCameraToTag"].rotation().z_degrees))
+                targetDrawer.addText(monoFrame, "eBotposeT: ({:.2f}, {:.2f}, {:.2f})".format(
+                    detectedTag["estimatedRobotPose"].translation().x,
+                    detectedTag["estimatedRobotPose"].translation().y,
+                    detectedTag["estimatedRobotPose"].translation().z))
+                targetDrawer.addText(monoFrame, "eBotposeR: ({:.2f}, {:.2f}, {:.2f})".format(
+                    detectedTag["estimatedRobotPose"].rotation().x_degrees,
+                    detectedTag["estimatedRobotPose"].rotation().y_degrees,
+                    detectedTag["estimatedRobotPose"].rotation().z_degrees))
+                targetDrawer.addText(monoFrame, "robotpose: ({:.2f}, {:.2f}, {:.2f})".format(
+                    detectedTag["estimatedRobotPose"].translation().x,
+                    detectedTag["estimatedRobotPose"].translation().y,
+                    detectedTag["estimatedRobotPose"].rotation().y_degrees))
 
         if self.DEBUG_VIDEO_OUTPUT:
             # cv2.imshow(pipeline_info["monoRightQueue"], frameRight)
