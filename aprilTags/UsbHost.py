@@ -28,7 +28,6 @@ from cscore_utils.usbCameraUtils import generateCameraParameters
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', dest='debug', action="store_true", default=False, help='Start in Debug Mode')
-parser.add_argument('-t', dest='test', action="store_true", default=False, help='Start in Test Mode')
 parser.add_argument('-pt', dest='performance_test', action="store_true", default=False, help='Set Performance Test Mode')
 parser.add_argument('-f', dest='family', action="store", type=str, default='tag16h5',
                     help='Tag family (default: tag16h5)')
@@ -42,14 +41,12 @@ parser.add_argument('-re', dest='refine_edges', action="store", type=float, defa
                     help='refine_edges (default: 1.0)')
 parser.add_argument('-ds', dest='decode_sharpening', action="store", type=float, default=0.25,
                     help='decode_sharpening (default: 0.25)')
-parser.add_argument('-dd', dest='detector_debug', action="store", type=int, default=0,
-                    help='AprilTag Detector debug mode (default: 0)')
-parser.add_argument('-imu', dest='imu', action="store_true", default=False, help='Use external IMU')
 parser.add_argument('-r', dest='record_video', action="store_true", default=False, help='Record video data')
 parser.add_argument('-dic', dest='tag_dictionary', action="store", type=str, default='test', help='Set Tag Dictionary')
 parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Left_Localizers', 'Right_Localizers'])
 parser.add_argument('-port', dest='ports', action="store", type=str, help='Set MJPEG Server Ports (default: 5800, 5801)', default="5800, 5801")
 parser.add_argument('-dev', dest='dev', action="store", type=str, help='Set Device Name (default: OV2311_1)', default="OV2311_1")
+parser.add_argument('-s', dest='strict', action="store_true", help='Enforce strict filtering locally', default=False)
 
 
 args = parser.parse_args()
@@ -81,9 +78,10 @@ class AprilTagsUSBHost:
 
         log.info("Starting AprilTag Detector")
 
-        self.DEBUG_VIDEO_OUTPUT = args.test
+        self.DEBUG_VIDEO_OUTPUT = args.debug
         self.ENABLE_SOLVEPNP_VISUALIZATION = True
         self.ENABL_LINUX_OPTIMIZATION = False
+        self.STRICT_FILTERING = args.strict
 
         self.valid_cameras = None
         if args.position is not None:
@@ -195,25 +193,6 @@ class AprilTagsUSBHost:
                 self.cameraSetup()
             
     def process_results(self, frame, timestamp):
-        if self.gyro is not None:
-            try:
-                robotAngles = {
-                    'pitch': math.radians(self.gyro.get('pitch')),
-                    'yaw': math.radians(self.gyro.get('yaw'))
-                }
-                if self.DEBUG_VIDEO_OUTPUT:
-                    self.testGui.updateYawValue(math.degrees(-robotAngles['yaw']))
-                    self.testGui.updatePitchValue(math.degrees(robotAngles['pitch']))
-            except Exception as e:
-                # log.error("Could not grab gyro values")
-                pass
-        else:
-            robotAngles = {
-                'pitch': math.radians(self.nt_subs['Pitch'].get()),
-                'roll': math.radians(self.nt_subs['Roll'].get()),
-                'yaw': math.radians(self.nt_subs['Yaw'].get())
-            }
-
         cameraToRobotV = self.nt_subs['camToRobotT3D'].get()
         cameraToRobotTransform = Transform3d(Translation3d(cameraToRobotV[0], cameraToRobotV[1], cameraToRobotV[2]),
                                              Rotation3d(cameraToRobotV[3], cameraToRobotV[4], cameraToRobotV[5]))
@@ -281,6 +260,11 @@ class AprilTagsUSBHost:
                 estimatedRobotTransform = tagPose.transformBy(Transform3d(wpiTranslation, Rotation3d())).transformBy(cameraToRobotTransform)
                 estimatedRobotPose = Pose3d(estimatedRobotTransform.translation(), cameraToTagEstimate.rotation())
 
+                if math.fabs(cameraToRobotTransform.rotation().x_degrees) > 10 or \
+                        math.fabs(cameraToRobotTransform.rotation().z_degrees) > 10:
+                    log.info("Detected Tag Estimation has a roll/pitch difference of > 10 degrees. Skipping...")
+                    continue
+
                 detectedTag = {
                     "tag": tag,
                     "corners": tagCorners,
@@ -323,35 +307,39 @@ class AprilTagsUSBHost:
         #     botPose =
 
         # Strategy 3: Remove tags from list if they are outside tolerance
-        x_mean = np.mean(robot_pose_x)
-        y_mean = np.mean(robot_pose_y)
-        yaw_mean = np.mean(robot_pose_yaw)
-        x_std = np.std(robot_pose_x)
-        y_std = np.std(robot_pose_x)
-        yaw_std = np.std(robot_pose_yaw)
-        std_multiplier = 1.1
-        rm_idx = []
-        if len(tag_id) > 1:
-            if math.fabs(robot_pose_x[0] - robot_pose_x[1]) > 0.05:
-                rm_idx = [0, 1]
-            if math.fabs(robot_pose_y[0] - robot_pose_y[1]) > 0.05:
-                rm_idx = [0, 1]
-            if math.fabs(robot_pose_yaw[0] - robot_pose_yaw[1]) > 1:
-                rm_idx = [0, 1]
-        elif len(tag_id) > 2:
-            for pose_idx in range(len(tag_id)):
-                if math.fabs(robot_pose_x[pose_idx] - x_mean) > x_std * std_multiplier:
-                    rm_idx.append(pose_idx)
-                if math.fabs(robot_pose_y[pose_idx] - y_mean) > y_std * std_multiplier:
-                    rm_idx.append(pose_idx)
-                if math.fabs(robot_pose_yaw[pose_idx] - yaw_mean) > yaw_std * std_multiplier:
-                    rm_idx.append(pose_idx)
+        if self.STRICT_FILTERING:
+            x_mean = np.mean(robot_pose_x)
+            y_mean = np.mean(robot_pose_y)
+            yaw_mean = np.mean(robot_pose_yaw)
+            x_std = np.std(robot_pose_x)
+            y_std = np.std(robot_pose_x)
+            yaw_std = np.std(robot_pose_yaw)
+            std_multiplier = 1.1
+            rm_idx = []
+            if len(tag_id) <= 1:
+                log.info("Only one tag found. Discarding this result due to uncertainty")
+                rm_idx = [0]
+            elif len(tag_id) > 1:
+                if math.fabs(robot_pose_x[0] - robot_pose_x[1]) > 0.05:
+                    rm_idx = [0, 1]
+                if math.fabs(robot_pose_y[0] - robot_pose_y[1]) > 0.05:
+                    rm_idx = [0, 1]
+                if math.fabs(robot_pose_yaw[0] - robot_pose_yaw[1]) > 1:
+                    rm_idx = [0, 1]
+            elif len(tag_id) > 2:
+                for pose_idx in range(len(tag_id)):
+                    if math.fabs(robot_pose_x[pose_idx] - x_mean) > x_std * std_multiplier:
+                        rm_idx.append(pose_idx)
+                    if math.fabs(robot_pose_y[pose_idx] - y_mean) > y_std * std_multiplier:
+                        rm_idx.append(pose_idx)
+                    if math.fabs(robot_pose_yaw[pose_idx] - yaw_mean) > yaw_std * std_multiplier:
+                        rm_idx.append(pose_idx)
 
-        rm_idx = np.unique(rm_idx)
-        tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
-        robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
-        robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
-        robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
+            rm_idx = np.unique(rm_idx)
+            tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
+            robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
+            robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
+            robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
 
         botPose = [np.average(robot_pose_x), np.average(robot_pose_y), 0,
                    0, 0, np.average(robot_pose_yaw),
@@ -403,14 +391,14 @@ class AprilTagsUSBHost:
                     detectedTag["tagTranslation"].rotation().x_degrees,
                     detectedTag["tagTranslation"].rotation().y_degrees,
                     detectedTag["tagTranslation"].rotation().z_degrees))
-                targetDrawer.addText(monoFrame, "wpiTag-T: ({:.2f}, {:.2f} {:.2f})".format(
-                    detectedTag["wpiCameraToTag"].translation().x,
-                    detectedTag["wpiCameraToTag"].translation().y,
-                    detectedTag["wpiCameraToTag"].translation().z))
-                targetDrawer.addText(monoFrame, "wpiTag-R: ({:.2f}, {:.2f} {:.2f})".format(
-                    detectedTag["wpiCameraToTag"].rotation().x_degrees,
-                    detectedTag["wpiCameraToTag"].rotation().y_degrees,
-                    detectedTag["wpiCameraToTag"].rotation().z_degrees))
+                # targetDrawer.addText(monoFrame, "wpiTag-T: ({:.2f}, {:.2f} {:.2f})".format(
+                #     detectedTag["wpiCameraToTag"].translation().x,
+                #     detectedTag["wpiCameraToTag"].translation().y,
+                #     detectedTag["wpiCameraToTag"].translation().z))
+                # targetDrawer.addText(monoFrame, "wpiTag-R: ({:.2f}, {:.2f} {:.2f})".format(
+                #     detectedTag["wpiCameraToTag"].rotation().x_degrees,
+                #     detectedTag["wpiCameraToTag"].rotation().y_degrees,
+                #     detectedTag["wpiCameraToTag"].rotation().z_degrees))
                 targetDrawer.addText(monoFrame, "eBotposeT: ({:.2f}, {:.2f}, {:.2f})".format(
                     detectedTag["estimatedRobotPose"].translation().x,
                     detectedTag["estimatedRobotPose"].translation().y,
@@ -445,9 +433,6 @@ class AprilTagsUSBHost:
         key = cv2.waitKey(1)
         if key == ord('q'):
             raise StopIteration()
-        elif key == ord(' '):
-            if self.gyro is not None:
-                self.gyro.resetAll()
 
         if self.DEBUG_VIDEO_OUTPUT:
             if not self.testGui.isVisible():
