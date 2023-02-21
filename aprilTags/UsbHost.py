@@ -293,7 +293,7 @@ class AprilTagsUSBHost:
             latencyMs = (timestamp - self.lastTimestamp) / 1000000.0
             self.latency = np.append(self.latency, latencyMs)
         avgLatency = np.average(self.latency) if len(self.latency) < 100 else np.average(self.latency[-100:])
-        latencyStd = np.std(self.latency) if len(self.latency) < 100 else np.std(self.latency[-100:])
+        # latencyStd = np.std(self.latency) if len(self.latency) < 100 else np.std(self.latency[-100:])
         self.lastTimestamp = timestamp
 
         # Merge AprilTag measurements to estimate
@@ -475,23 +475,6 @@ class AprilTagsUSBHost:
         return NT_Instance
 
     def cameraSetup(self):
-        # if platform.system() == 'Linux' and self.ENABLE_LINUX_OPTIMIZATION:
-        #     self.camera = cv2.VideoCapture(0, cv2.CAP_V4L2)
-        #     self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, self.camera_params["height"])
-        #     self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, self.camera_params["width"])
-        #     self.camera.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter.fourcc('m', 'j', 'p', 'g'))
-        #     self.camera.set(cv2.CAP_PROP_FPS, self.camera_params["fps"])
-        #     self.camera.set(cv2.CAP_PROP_GAIN, self.camera_params["gain"])
-        #     self.camera.set(cv2.CAP_PROP_EXPOSURE, -11)
-        #     self.camera.set(cv2.CAP_PROP_BRIGHTNESS, 0)
-        #     self.camera.set(cv2.CAP_PROP_SHARPNESS, 0)
-        #     self.camera = cv2.VideoCapture("v4l2src device=/dev/video" + str(0) +
-        #                                   " extra_controls=\"c,exposure_auto=" + str(self.camera_params["exposure_auto"]) +
-        #                                   ",exposure_absolute=" + str(self.camera_params["exposure"]) +
-        #                                   ",gain=" + str(self.camera_params["gain"]) +
-        #                                   ",sharpness=0,brightness=0\" ! image/jpeg,format=MJPG,width=" + str(self.camera_params["width"]) +
-        #                                   ",height=" + str(self.camera_params["height"]) + " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
-        # else:
         self.camera = CSCoreCamera(self.camera_params, True)
     
 
