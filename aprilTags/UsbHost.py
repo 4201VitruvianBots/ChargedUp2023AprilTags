@@ -475,6 +475,8 @@ class AprilTagsUSBHost:
         return NT_Instance
 
     def cameraSetup(self):
+        if platform.system() == 'Linux':
+            os.system('./../coprocessors/startup/initCameraSettings.sh')
         self.camera = CSCoreCamera(self.camera_params, True)
     
 
