@@ -47,6 +47,7 @@ parser.add_argument('-p', dest='position', action="store", type=str, help='Enfor
 parser.add_argument('-port', dest='ports', action="store", type=str, help='Set MJPEG Server Ports (default: 5800, 5801)', default="5800, 5801")
 parser.add_argument('-dev', dest='dev', action="store", type=str, help='Set Device Name (default: OV2311_1)', default="OV2311_1")
 parser.add_argument('-s', dest='strict', action="store_true", help='Enforce strict filtering locally', default=False)
+parser.add_argument('-o', dest='cam_orientation', action="store", help='Set camera orientation: (N)ormal, (U)pside-down (CW)lockwise (CCW)ounter-Clockwise)', default='N')
 
 
 args = parser.parse_args()
@@ -71,6 +72,7 @@ class AprilTagsUSBHost:
 
     def __init__(self):
         self.camera = None
+        self.camera_orientation = args.cam_orientation
         self.NT_Instance = self.init_networktables()
         if args.performance_test:
             disabledStdOut = logging.StreamHandler(stream=None)
@@ -249,7 +251,33 @@ class AprilTagsUSBHost:
                 tagPose = Pose3d(tagT3D, tagR3D)
                 cameraToTagEstimate = detector.estimatePose(tag)
 
-                wpiTranslation = CoordinateSystem.convert(cameraToTagEstimate.translation().rotateBy(cameraToTagEstimate.inverse().rotation()),
+                if self.camera_orientation == 'CW':
+                    camRotation = Rotation3d(cameraToTagEstimate.rotation().x - math.pi/2.0,
+                                             cameraToTagEstimate.rotation().y - math.pi/2.0,
+                                             cameraToTagEstimate.rotation().z - math.pi/2.0)
+                    camInvRotation = Rotation3d(cameraToTagEstimate.inverse().rotation().x - math.pi/2.0,
+                                                cameraToTagEstimate.inverse().rotation().y - math.pi/2.0,
+                                                cameraToTagEstimate.inverse().rotation().z - math.pi/2.0)
+                elif self.camera_orientation == 'CCW':
+                    camRotation = Rotation3d(cameraToTagEstimate.rotation().x + math.pi/2.0,
+                                             cameraToTagEstimate.rotation().y + math.pi/2.0,
+                                             cameraToTagEstimate.rotation().z + math.pi/2.0)
+                    camInvRotation = Rotation3d(cameraToTagEstimate.inverse().rotation().x + math.pi/2.0,
+                                                cameraToTagEstimate.inverse().rotation().y + math.pi/2.0,
+                                                cameraToTagEstimate.inverse().rotation().z + math.pi/2.0)
+                elif self.camera_orientation == 'U':
+                    camRotation = Rotation3d(cameraToTagEstimate.rotation().x + math.pi,
+                                             cameraToTagEstimate.rotation().y + math.pi,
+                                             cameraToTagEstimate.rotation().z + math.pi)
+                    camInvRotation = Rotation3d(cameraToTagEstimate.inverse().rotation().x + math.pi,
+                                                cameraToTagEstimate.inverse().rotation().y + math.pi,
+                                                cameraToTagEstimate.inverse().rotation().z + math.pi)
+                else:
+                    camRotation = cameraToTagEstimate.rotation()
+                    camInvRotation = cameraToTagEstimate.inverse().rotation()
+                rotatedCameraToTagEstimate = Transform3d(cameraToTagEstimate.translation(), camRotation)
+
+                wpiTranslation = CoordinateSystem.convert(cameraToTagEstimate.translation().rotateBy(camInvRotation),
                                                         CoordinateSystem.EDN(),
                                                         CoordinateSystem.NWU())
                 # wpiTransform = Transform3d(wpiTranslation, cameraToTagEstimate.rotation())
@@ -258,7 +286,7 @@ class AprilTagsUSBHost:
                 # estimatedRobotPose = tagPose.transformBy(Transform3d(wpiTransform, tagTranslation.rotation())) \
                 #                             .transformBy(cameraToRobotTransform)
                 estimatedRobotTransform = tagPose.transformBy(Transform3d(wpiTranslation, Rotation3d())).transformBy(cameraToRobotTransform)
-                estimatedRobotPose = Pose3d(estimatedRobotTransform.translation(), cameraToTagEstimate.rotation())
+                estimatedRobotPose = Pose3d(estimatedRobotTransform.translation(), camRotation)
 
                 if math.fabs(cameraToRobotTransform.rotation().x_degrees) > 10 or \
                         math.fabs(cameraToRobotTransform.rotation().z_degrees) > 10:
@@ -271,7 +299,7 @@ class AprilTagsUSBHost:
                     "topLeftXY": topLeftXY,
                     "bottomRightXY": bottomRightXY,
                     "tagPose": tagPose,
-                    "tagTranslation": cameraToTagEstimate,
+                    "tagTranslation": rotatedCameraToTagEstimate,
                     "wpiCameraToTag": estimatedRobotTransform,
                     "estimatedRobotPose": estimatedRobotPose
                 }
@@ -335,6 +363,8 @@ class AprilTagsUSBHost:
                     if math.fabs(robot_pose_yaw[pose_idx] - yaw_mean) > yaw_std * std_multiplier:
                         rm_idx.append(pose_idx)
 
+            log.info("Std dev X: {:.2f}\tY: {:.2f}".format(x_std, y_std))
+
             rm_idx = np.unique(rm_idx)
             tag_id = [i for j, i in enumerate(tag_id) if j not in rm_idx]
             robot_pose_x = [i for j, i in enumerate(robot_pose_x) if j not in rm_idx]
@@ -345,7 +375,6 @@ class AprilTagsUSBHost:
                    0, 0, np.average(robot_pose_yaw),
                    self.latency[-1]]
 
-        log.info("Std dev X: {:.2f}\tY: {:.2f}".format(x_std, y_std))
         self.nt_pubs["tv"].set(1 if len(tag_id) > 0 else 0)
         self.nt_pubs["tid"].set(tag_id)
         self.nt_pubs["rPosX"].set(robot_pose_x)

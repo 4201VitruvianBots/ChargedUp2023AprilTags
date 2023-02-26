@@ -13,7 +13,8 @@ c_handler = logging.StreamHandler()
 log.addHandler(c_handler)
 log.setLevel(logging.INFO)
 
-class NTServer:
+
+class SensorFusionServer:
 
     def __init__(self):
 
@@ -26,6 +27,30 @@ class NTServer:
             "lLocalizer": self.nt_lLocalizer,
             "rLocalizer": self.nt_rLocalizer,
         }
+        self.nt_pubSub = {
+            'pub': dict(),
+            'sub': dict()
+        }
+        for name, localizer in self.localizers.items():
+            sub = {
+                'tv': localizer.getIntegerTopic("tv").subscribe(0),
+                'tid': localizer.getIntegerArrayTopic("tid").subscribe([0]),
+                'rPosX': localizer.getDoubleArrayTopic("Robot Pose X").subscribe([0]),
+                'rPosY': localizer.getDoubleArrayTopic("Robot Pose Y").subscribe([0]),
+                'rPosYaw': localizer.getDoubleArrayTopic("Robot Pose Yaw").subscribe([0]),
+                'latency': localizer.getDoubleArrayTopic("latency").subscribe([0]),
+            }
+            self.nt_pubSub['sub'][name] = sub
+        self.nt_pubSub['pub']['fusedLocalizer'] = {
+            'tv': localizer.getIntegerTopic("tv").publish(),
+            'tid': localizer.getIntegerArrayTopic("tid").publish(),
+            'rPosX': self.nt_fusedLocalizer.getDoubleArrayTopic("Robot Pose X").publish(),
+            'rPosY': self.nt_fusedLocalizer.getDoubleArrayTopic("Robot Pose Y").publish(),
+            'rPosYaw': self.nt_fusedLocalizer.getDoubleArrayTopic("Robot Pose Yaw").publish(),
+            'latency': self.nt_fusedLocalizer.getDoubleArrayTopic("latency").publish(),
+            'botpose': self.nt_fusedLocalizer.getDoubleArrayTopic("botpose").publish(),
+        }
+
         t = threading.Thread(target=self._run, daemon=True)
         t.start()
         t.join()
@@ -73,36 +98,35 @@ class NTServer:
 
     def _run(self):
         while True:
-            latencies = []
             t_ids = []
             x_poses = []
             y_poses = []
             yaw_rotations = []
-            for name, localizer in self.localizers.items():
-                local_ids = localizer.getNumberArray("tid", [-1])
+            latencies = []
+            for name, localizer in self.nt_pubSub['sub'].items():
+                tv = localizer['tv'].get()
+                local_ids = localizer['tid'].get()
+                if not tv:
+                    continue
                 if len(local_ids) == 0:
                     continue
                 if local_ids[0] == -1:
                     continue
 
-                local_x = localizer.getNumberArray("Robot Pose X", [0])
-                local_y = localizer.getNumberArray("Robot Pose Y", [0])
-                local_yaw = localizer.getNumberArray("Robot Pose Yaw", [0])
+                local_l = localizer['latency'].get([0])
+                local_x = localizer['rPosX'].get([0])
+                local_y = localizer['rPosY'].get([0])
+                local_yaw = localizer['rPosYaw'].get([0])
 
-                if not (len(local_ids) == len(local_x) == len(local_y) == len(local_yaw)):
+                if not (len(local_ids) == len(local_x) == len(local_y) == len(local_yaw) == len(local_l)):
                     log.warning("NTServerError::{} array values are not the same length. Skipping...")
                     continue
 
-                local_latency = localizer.getNumber("latency", 0)
-                lArray = np.ones([1, len(local_ids)], dtype=float) * local_latency
-                try:
-                    latencies.extend(lArray[0].tolist())
-                except Exception as e:
-                    continue
                 t_ids.extend(local_ids)
                 x_poses.extend(local_x)
                 y_poses.extend(local_y)
                 yaw_rotations.extend(local_yaw)
+                latencies.extend(local_l)
 
             if len(t_ids) == 0:
                 continue
@@ -113,7 +137,7 @@ class NTServer:
             x_std = np.std(x_poses)
             y_std = np.std(y_poses)
             yaw_std = np.std(yaw_rotations)
-            std_multiplier = 0.25
+            std_multiplier = 1.1
             rm_idx = []
             if len(y_poses) > 1:
                 for pose_idx in range(len(t_ids)):
@@ -121,7 +145,7 @@ class NTServer:
                         rm_idx.append(pose_idx)
                     if math.fabs(x_poses[pose_idx] - y_mean) > y_std * std_multiplier:
                         rm_idx.append(pose_idx)
-                    if math.fabs(x_poses[pose_idx] - yaw_mean) > yaw_std:
+                    if math.fabs(x_poses[pose_idx] - yaw_mean) > yaw_std * std_multiplier:
                         rm_idx.append(pose_idx)
 
                 rm_idx = np.unique(rm_idx)
@@ -134,10 +158,16 @@ class NTServer:
                 botPose = [np.average(robot_pose_x), np.average(robot_pose_y), 0, 0, 0,
                            np.average(robot_pose_yaw), avg_lat]
 
-                self.nt_fusedLocalizer.putNumberArray("botpose", botPose)
-                self.nt_fusedLocalizer.putNumber("latency", avg_lat)
+                self.nt_pubSub['pub']['fusedLocalizer']['tv'].set(1 if len(t_ids) > 0 else 0)
+                self.nt_pubSub['pub']['fusedLocalizer']['tid'].set(t_ids)
+                self.nt_pubSub['pub']['fusedLocalizer']['rPosX'].set(robot_pose_x)
+                self.nt_pubSub['pub']['fusedLocalizer']['rPosY'].set(robot_pose_y)
+                self.nt_pubSub['pub']['fusedLocalizer']['rPosYaw'].set(robot_pose_yaw)
+                self.nt_pubSub['pub']['fusedLocalizer']['latency'].set(robot_pose_latency)
+                self.nt_pubSub['pub']['fusedLocalizer']['botpose'].set(botPose)
+
                 log.debug("Fused Pose estimation: {}".format(botPose))
 
 
 if __name__ == '__main__':
-    NTServer()
+    SensorFusionServer()
