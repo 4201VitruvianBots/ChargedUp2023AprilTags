@@ -12,6 +12,9 @@ from os.path import basename
 import socket
 import sys
 
+import robotpy_apriltag
+Point = robotpy_apriltag.AprilTagDetection.Point
+
 from wpimath.geometry import Translation3d, Rotation3d, Pose3d, Quaternion, CoordinateSystem, Transform3d
 
 from common.cvUtils import TargetDrawer, drawStats
@@ -20,7 +23,7 @@ from cscore_utils.CSCoreCamera import CSCoreCamera
 from ntcore import NetworkTableInstance
 
 from aprilTags.apriltagDetector import AprilTagDetector
-from common import constants
+from common import constants, cvUtils
 from common import utils
 from cscore_utils.CSCoreServer import CSCoreServer
 from aprilTags.tag_dictionary import TAG_DICTIONARY
@@ -237,7 +240,9 @@ class AprilTagsUSBHost:
                 elif tag.getDecisionMargin() < 35:
                     log.warning("Tag {} found, but not valid".format(tag.getId()))
                     continue
+
                 tagCorners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
+
                 xPixels = [p.x for p in tagCorners]
                 yPixels = [p.y for p in tagCorners]
                 topLeftXY = (int(min(xPixels)), int(min(yPixels)))
@@ -395,17 +400,41 @@ class AprilTagsUSBHost:
             }
         }
 
+        if self.camera_orientation == 'CW':
+            monoFrame = cv2.rotate(monoFrame, cv2.ROTATE_90_CLOCKWISE)
+        elif self.camera_orientation == 'CCW':
+            monoFrame = cv2.rotate(monoFrame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        elif self.camera_orientation == 'U':
+            monoFrame = cv2.rotate(monoFrame, cv2.ROTATE_180)
+
+        statText = [
+            "FPS: {:.2f}".format(fpsValue),
+            "Latency: {:.2f}ms".format(avgLatency)
+        ]
+        drawStats(monoFrame, statText)
+
         for detectedTag in detectedTags:
             points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
 
+            if self.camera_orientation == 'CW':
+                rotation = math.pi/2.0
+                refPoint = Point(self.camera_params['width']/2.0, self.camera_params['height']/2.0)
+                points = [cvUtils.rotatePoint(p, refPoint, rotation) for p in detectedTag["corners"]]
+                points = np.array([(int(p.x), int(p.y)) for p in points])
+            elif self.camera_orientation == 'CCW':
+                rotation = -math.pi/2.0
+                refPoint = Point(self.camera_params['width']/2.0, self.camera_params['height']/2.0)
+                points = [cvUtils.rotatePoint(p, refPoint, rotation) for p in detectedTag["corners"]]
+                points = np.array([(int(p.x), int(p.y)) for p in points])
+            elif self.camera_orientation == 'U':
+                rotation = math.pi
+                refPoint = Point(self.camera_params['width']/2.0, self.camera_params['height']/2.0)
+                points = [cvUtils.rotatePoint(p, refPoint, rotation) for p in detectedTag["corners"]]
+                points = np.array([(int(p.x), int(p.y)) for p in points])
+
             targetDrawer = TargetDrawer(points)
             targetDrawer.drawTargetLines(monoFrame)
-
-            statText = [
-                "FPS: {:.2f}".format(fpsValue),
-                "Latency: {:.2f}ms".format(avgLatency)
-            ]
-            drawStats(monoFrame, statText)
+            targetDrawer.updateTargetPoints(points)
 
             if self.ENABLE_SOLVEPNP_VISUALIZATION:
                 targetDrawer.drawTargetBox(monoFrame, self.camera_params['iMatrix'], detectedTag["tagTranslation"])
