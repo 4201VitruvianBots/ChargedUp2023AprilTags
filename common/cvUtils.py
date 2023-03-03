@@ -1,11 +1,15 @@
+import math
+
 import cv2
 import numpy as np
+import robotpy_apriltag
 
 from common import constants
 
+Point = robotpy_apriltag.AprilTagDetection.Point
+
 
 class TargetDrawer:
-
     def __init__(self, targetPoints, fontSize=0.6, fontColor=(255, 255, 255)):
         self.targetPoints = targetPoints
         self.fontSize = fontSize
@@ -16,6 +20,11 @@ class TargetDrawer:
 
     def drawTargetLines(self, frame, lineColor=(120, 120, 120), lineThickness=3):
         cv2.polylines(frame, [self.targetPoints], True, lineColor, lineThickness)
+
+    def updateTargetPoints(self, targetPoints):
+        self.targetPoints = targetPoints
+        self.textX = max(self.targetPoints[:, 0])
+        self.textY = min(self.targetPoints[:, 1])
 
     def drawTargetBox(self, frame, iMatrix, boxTranslation, lineColor=(0, 255, 0), lineThickness=1):
         r_vec = np.array([boxTranslation.rotation().x,
@@ -53,3 +62,8 @@ def drawStats(frame, stats, fontSize=1, fontColor=(255, 255, 255)):
     for stat in stats:
         cv2.putText(frame, stat, (0, yValue), cv2.FONT_HERSHEY_TRIPLEX, fontSize, fontColor)
         yValue += fontIncrement
+
+
+def rotatePoint(point, refPoint, rotation):
+    return Point((point.x - refPoint.x) * math.cos(rotation) - (point.y - refPoint.y) * math.sin(rotation) + refPoint.x,
+                 (point.x - refPoint.x) * math.sin(rotation) + (point.y - refPoint.y) * math.cos(rotation) + refPoint.y)
