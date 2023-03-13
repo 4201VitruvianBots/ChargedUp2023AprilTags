@@ -65,8 +65,9 @@ def drawStats(frame, stats, fontSize=1, fontColor=(255, 255, 255)):
 
 
 def rotatePoint(point, refPoint, rotation):
-    return Point(((point.x - refPoint.x) * math.cos(rotation) -
-                  (point.y - refPoint.y) * math.sin(rotation)) + refPoint.x,
-                 ((point.x - refPoint.x) * math.sin(rotation) +
-                  (point.y - refPoint.y) * math.cos(rotation)) + refPoint.y
-                 )
+    adjusted_x = point.x - refPoint.x
+    adjusted_y = point.y - refPoint.y
+    cos_rad = math.cos(rotation)
+    sin_rad = math.sin(rotation)
+    return Point(refPoint.x + cos_rad * adjusted_x + sin_rad * adjusted_y,
+                 refPoint.y - sin_rad * adjusted_x + cos_rad * adjusted_y)

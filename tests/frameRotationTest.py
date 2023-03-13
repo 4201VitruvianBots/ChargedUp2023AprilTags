@@ -42,8 +42,11 @@ image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 image2 = copy.copy(image)
 image2 = cv2.rotate(image2, cv2.ROTATE_90_CLOCKWISE)
 
+cos_theta = np.cos(-math.pi/2)
+sin_theta = np.sin(-math.pi/2)
+rotationMatrix = np.array(((cos_theta, -sin_theta), (sin_theta, cos_theta)))
+
 while True:
-    cv2.imshow("Image", image)
     tags = detector.detect(image)
 
     for tag in tags:
@@ -97,7 +100,6 @@ while True:
             estimatedRobotPose.translation().y,
             estimatedRobotPose.rotation().y_degrees))
 
-    cv2.imshow("CW_Image", image2)
     tags = detector.detect(image2)
 
     for tag in tags:
@@ -126,11 +128,16 @@ while True:
             cameraToRobotTransform)
         estimatedRobotPose = Pose3d(estimatedRobotTransform.translation(), camRotation)
 
-        points = np.array([(int(p.x), int(p.y)) for p in tagCorners])
+        # points = np.array([(int(p.x), int(p.y)) for p in tagCorners])
 
         rotation = -math.pi / 2.0
-        refPoint = Point(camera_params['width'] / 2.0, camera_params['height'] / 2.0)
+        refPoint = Point(800, 600)
+
+        # M_inv = cv2.getRotationMatrix2D((800 / 2, 600 / 2), 90, 1)
+        # points = cv2.transform(points, M_inv)
         points = [cvUtils.rotatePoint(p, refPoint, rotation) for p in tagCorners]
+
+
         points = np.array([(int(p.x), int(p.y)) for p in points])
 
         targetDrawer = TargetDrawer(points)
@@ -158,6 +165,9 @@ while True:
             estimatedRobotPose.translation().x,
             estimatedRobotPose.translation().y,
             estimatedRobotPose.rotation().y_degrees))
+
+    cv2.imshow("Image", image)
+    cv2.imshow("CW_Image", image2)
 
     key = cv2.waitKey(1)
     if key == ord('q'):
