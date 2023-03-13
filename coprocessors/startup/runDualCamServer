@@ -1,0 +1,7 @@
+#!/bin/sh
+### TYPE: upload-python
+pkill -f dualCameraHost
+export PYTHONUNBUFFERED=1
+cd /home/pi/ChargedUp2023DepthAI
+./coprocessors/startup/initCameraSettings.sh
+exec /usr/bin/python3 cscore_utils/dualCameraHost.py &

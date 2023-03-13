@@ -47,6 +47,7 @@ class CSCoreServer:
 
             self.mjpegServer = cs.MjpegServer(self.ip_address, self.input_source)
             self.mjpegServer.setSource(camera.getCamera())
+            log.info("MJPEG Server started at {}:{} for raw input".format(self.ip_address, self.input_source))
             # test = self.mjpegServer.setConfigJson(camera.getControl())
             # if not test:
             #     log.warning("Camera {} stream config not applied".format(self.name))
@@ -55,6 +56,8 @@ class CSCoreServer:
             self.cvSource = cscore.CvSource("{}_cvsource".format(camera.getName()), cs.VideoMode.PixelFormat.kMJPEG, width, height, fps)
             self.cvMjpegServer = cs.MjpegServer(self.ip_address, self.output_source)
             self.cvMjpegServer.setSource(self.cvSource)
+            log.info("MJPEG Server started at {}:{} for CV output".format(self.ip_address, self.output_source))
+
             cs.CameraServer.addServer(self.mjpegServer)
             cs.CameraServer.addServer(self.cvMjpegServer)
         except Exception as e:
