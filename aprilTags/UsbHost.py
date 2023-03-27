@@ -13,6 +13,8 @@ import socket
 import sys
 
 import robotpy_apriltag
+from wpimath.units import inchesToMeters
+
 Point = robotpy_apriltag.AprilTagDetection.Point
 
 from wpimath.geometry import Translation3d, Rotation3d, Pose3d, Quaternion, CoordinateSystem, Transform3d
@@ -135,6 +137,8 @@ class AprilTagsUSBHost:
                                           fps=self.camera_params["fps"])
 
         self.detector = AprilTagDetector(args, self.camera_params)
+        self.tagAngleThreshold = 5.0
+        self.tagDistanceThreshold = inchesToMeters(90)
 
         self.gyro = None
 
@@ -253,19 +257,23 @@ class AprilTagsUSBHost:
                 tagR3D = Rotation3d(Quaternion(tagRotation['W'], tagRotation['X'], tagRotation['Y'], tagRotation['Z']))
                 tagPose = Pose3d(tagT3D, tagR3D)
                 cameraToTagEstimate = detector.estimatePose(tag)
+                ## remove tag if distance is greater than a certain threshold or if one of the returned angle is greater than a certain threshold
+
+                if tagTranslation.rotation().x_degrees < self.tagAngleThreshold:
+                    continue
+                if tagTranslation.rotation().y_degrees < self.tagAngleThreshold:
+                    continue
+                if tagTranslation.rotation().z_degrees < self.tagAngleThreshold:
+                    continue
+
+                tagDistance = tagTranslation.translation().norm()
+
+                if tagDistance > self.tagDistanceThreshold:
+                    continue
 
                 camRotation = cameraToTagEstimate.rotation()
                 camInvRotation = cameraToTagEstimate.inverse().rotation()
-                if self.camera_orientation == 'CW':
-                    camRotation = camRotation.rotateBy(Rotation3d(0, 0, -math.pi/2))
-                    camInvRotation = camInvRotation.rotateBy(Rotation3d(0, 0, -math.pi/2))
-                elif self.camera_orientation == 'CCW':
-                    camRotation = camRotation.rotateBy(Rotation3d(0, 0, math.pi/2))
-                    camInvRotation = camInvRotation.rotateBy(Rotation3d(0, 0, math.pi/2))
-                elif self.camera_orientation == 'U':
-                    camRotation = camRotation.rotateBy(Rotation3d(0, 0, math.pi))
-                    camInvRotation = camInvRotation.rotateBy(Rotation3d(0, 0, math.pi))
-
+                
                 rotatedCameraToTagEstimate = Transform3d(cameraToTagEstimate.translation(), camRotation)
 
                 wpiTranslation = CoordinateSystem.convert(cameraToTagEstimate.translation().rotateBy(camInvRotation),
