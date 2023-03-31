@@ -259,21 +259,22 @@ class AprilTagsUSBHost:
                 cameraToTagEstimate = detector.estimatePose(tag)
                 ## remove tag if distance is greater than a certain threshold or if one of the returned angle is greater than a certain threshold
 
-                if tagTranslation.rotation().x_degrees < self.tagAngleThreshold:
+                if cameraToTagEstimate.rotation().x_degrees > self.tagAngleThreshold:
+                    log.info("Tag {} has invalid x angle".format(tag_id))
                     continue
-                if tagTranslation.rotation().y_degrees < self.tagAngleThreshold:
+                if cameraToTagEstimate.rotation().y_degrees > self.tagAngleThreshold:
                     continue
-                if tagTranslation.rotation().z_degrees < self.tagAngleThreshold:
+                if cameraToTagEstimate.rotation().z_degrees > self.tagAngleThreshold:
                     continue
 
-                tagDistance = tagTranslation.translation().norm()
+                tagDistance = cameraToTagEstimate.translation().norm()
 
                 if tagDistance > self.tagDistanceThreshold:
                     continue
 
                 camRotation = cameraToTagEstimate.rotation()
                 camInvRotation = cameraToTagEstimate.inverse().rotation()
-                
+
                 rotatedCameraToTagEstimate = Transform3d(cameraToTagEstimate.translation(), camRotation)
 
                 wpiTranslation = CoordinateSystem.convert(cameraToTagEstimate.translation().rotateBy(camInvRotation),
