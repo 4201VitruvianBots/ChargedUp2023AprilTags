@@ -44,17 +44,42 @@ def save_frame_every_second(output_folder: pathlib.Path, capture_duration:float=
     # Release the camera resources
     cap.release()
 
-## save captured frames
 def loop_save_frames_with_text():
     output_folder = pathlib.Path("captured_frames")
     capture_duration = 60  # Capture images for 60 seconds
     save_frame_every_second(output_folder, capture_duration)
 
-## go through every saved image
 def show_frame():
     frame_directory = pathlib.Path('captured_frames')
     for image_file in frame_directory.glob('*.png'):
         image = cv2.imread(str(image_file))
+        image = image[:,:,0]
+        detector = robotpy_apriltag.AprilTagDetector()
+
+        # detector config
+        detector_config = robotpy_apriltag.AprilTagDetector.Config()
+        detector_config.refineEdges = 1.0
+        detector_config.quadDecimate = 1.0
+        detector_config.numThreads = 3
+        detector_config.quadSigma = 1.0
+        detector_config.decodeSharpening = 0.25
+        detector.setConfig(detector_config)
+
+        # print detections
+        detector.addFamily("tag16h5", 3)
+        detections = detector.detect(image)
+        print(detections)
+
+        # cycles through every detected tag and prints detection corners
+        if len(detections) > 0:
+            for tag in detections:
+                tagCorners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
+                print(tagCorners)
+                continue
+
+        # 4 - 1 right side; 3 - 2 left side; right side - left side = if tag is usable
+
+        # cycle images
         cv2.imshow(str(image_file), image)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
