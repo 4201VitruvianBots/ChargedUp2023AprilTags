@@ -1,13 +1,16 @@
+import copy
 import pathlib
 import cv2
 import os
 import time
 
+import numpy as np
 import robotpy_apriltag
 
 from icecream import ic
 
 import matplotlib.pyplot as plt
+
 
 def save_frame_every_second(output_folder: pathlib.Path, capture_duration: float = 60):
     # Ensure the output folder exists
@@ -59,7 +62,7 @@ def show_frame():
     frame_directory = pathlib.Path('captured_frames')
     for image_file in frame_directory.glob('*.png'):
         image = cv2.imread(str(image_file))
-        image = image[:, :, 0]
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         detector = robotpy_apriltag.AprilTagDetector()
 
         # detector config
@@ -70,43 +73,64 @@ def show_frame():
         detector_config.quadSigma = 1.0
         detector_config.decodeSharpening = 0.25
         detector.setConfig(detector_config)
-
-        # print detections
         detector.addFamily("tag16h5", 3)
         detections = detector.detect(image)
 
         # calls tag filter
-        tag_filter(detections)
+        valid_detections = tag_filter(detections)
+
+        # draws lines around valid tags
+        for detection in valid_detections:
+            tag_corners = [detection.getCorner(0), detection.getCorner(1), detection.getCorner(2),
+                           detection.getCorner(3)]
+            points = np.array([(int(p.x), int(p.y)) for p in tag_corners])
+            cv2.polylines(image, [points], True, (255, 255, 255), 1)
 
         # cycle images
-        plt.imshow(image, cmap='gray', vmin=0, vmax=image.max())
-        plt.show()
-        # cv2.imshow(str(image_file), image)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
+        cv2.imshow(str(image_file), image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
 
 def tag_filter(detections):
     # cycles through every detected tag and prints detection corners
-    # 3 - 0 right side; 2 - 1 left side; right side - left side = if tag is usable
-    tag_threshold = 10
+    tag_threshold = 7
 
+    valid_detections = []
     if len(detections) > 0:
         for tag in detections:
             tag_corners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
 
+            # finds diff of right/left sides
             right_side = point_dist(tag_corners[3], tag_corners[0])
             left_side = point_dist(tag_corners[2], tag_corners[1])
-
             side_diff = abs(right_side - left_side)
+            if side_diff > tag_threshold:
+                continue
 
-            if side_diff < tag_threshold:
+            # finds diff of top/bottom sides
+            top = point_dist(tag_corners[3], tag_corners[2])
+            bottom = point_dist(tag_corners[1], tag_corners[0])
+            side_diff = abs(top - bottom)
+            if side_diff > tag_threshold:
                 continue
-            else:
-                ic(tag_corners)
-                ic(side_diff)
-                print(tag)
+
+            # checks if valid tag is within reasonable aspect ratio
+            aspect = top / right_side
+            if not (0.8 < aspect < 1.2):
                 continue
+
+            # checks if valid tag is within reasonable area
+            area = top * right_side
+            if area < 96:
+                continue
+
+            # ic(tag_corners)
+            # ic(side_diff)
+            # print(tag)
+            valid_detections.append(tag)
+
+    return valid_detections
 
 
 def point_dist(p1: robotpy_apriltag.AprilTagDetection.Point, p2: robotpy_apriltag.AprilTagDetection.Point):
