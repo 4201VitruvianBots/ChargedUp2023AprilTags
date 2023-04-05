@@ -1,8 +1,13 @@
 import copy
+import math
 import pathlib
+import socket
+from os.path import basename
+
 import cv2
 import os
 import time
+import typing
 
 import numpy as np
 import robotpy_apriltag
@@ -10,6 +15,12 @@ import robotpy_apriltag
 from icecream import ic
 
 import matplotlib.pyplot as plt
+from ntcore._ntcore import NetworkTableInstance
+from wpimath.geometry import Pose3d, Rotation3d, Translation3d, Quaternion, CoordinateSystem, Transform3d
+
+from aprilTags import tag_dictionary
+from aprilTags.UsbHost import log, args
+from common import constants
 
 
 def save_frame_every_second(output_folder: pathlib.Path, capture_duration: float = 60):
@@ -65,6 +76,17 @@ def show_frame():
         image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
         detector = robotpy_apriltag.AprilTagDetector()
 
+        tag_size_meters = 0.1524
+
+        detector_intrinsics = robotpy_apriltag.AprilTagPoseEstimator.Config(
+            tag_size_meters,
+            8.7638714483680690e+02,
+            8.7644598649542741e+02,
+            8.4331555653705630e+02,
+            6.5641811849711667e+02)
+
+        estimator = robotpy_apriltag.AprilTagPoseEstimator(detector_intrinsics)
+
         # detector config
         detector_config = robotpy_apriltag.AprilTagDetector.Config()
         detector_config.refineEdges = 1.0
@@ -79,12 +101,11 @@ def show_frame():
         # calls tag filter
         valid_detections = tag_filter(detections)
 
-        # draws lines around valid tags
-        for detection in valid_detections:
-            tag_corners = [detection.getCorner(0), detection.getCorner(1), detection.getCorner(2),
-                           detection.getCorner(3)]
-            points = np.array([(int(p.x), int(p.y)) for p in tag_corners])
-            cv2.polylines(image, [points], True, (255, 255, 255), 1)
+        # calls tag estimator
+        tag_estimate(valid_detections, detector, image, estimator)
+
+        # for detections in valid_detections:
+        #     print(estimator.estimate(detections))
 
         # cycle images
         cv2.imshow(str(image_file), image)
@@ -92,7 +113,7 @@ def show_frame():
         cv2.destroyAllWindows()
 
 
-def tag_filter(detections):
+def tag_filter(detections: typing.List[robotpy_apriltag.AprilTagDetection.Point]):
     # cycles through every detected tag and prints detection corners
     tag_threshold = 7
 
@@ -133,8 +154,174 @@ def tag_filter(detections):
     return valid_detections
 
 
+def tag_estimate(valid_detections, detector, image, estimator):
+    # network table setup
+    device_name = args.dev
+    camera_params = generateCameraParameters(device_name)
+    nt_instance = init_network_tables()
+    nt_drivetrain_tab = nt_instance.getTable("Swerve")
+    nt_apriltag_tab = nt_instance.getTable(camera_params["nt_name"])
+    nt_subs = {
+        'Pitch': nt_drivetrain_tab.getDoubleTopic("Pitch").subscribe(0),
+        'Roll': nt_drivetrain_tab.getDoubleTopic("Roll").subscribe(0),
+        'Yaw': nt_drivetrain_tab.getDoubleTopic("Yaw").subscribe(0),
+        'camToRobotT3D': nt_apriltag_tab.getDoubleArrayTopic("camToRobotT3D").subscribe([0, 0, 0, 0, 0, 0]),
+    }
+
+    camera_to_robot_v = nt_subs['camToRobotT3D'].get()
+    camera_to_robot_transform = Transform3d(
+        Translation3d(camera_to_robot_v[0], camera_to_robot_v[1], camera_to_robot_v[2]),
+        Rotation3d(camera_to_robot_v[3], camera_to_robot_v[4], camera_to_robot_v[5]))
+
+    # detected tag setup
+    detected_tags = []
+    robot_pose_x = []
+    robot_pose_y = []
+    robot_pose_z = []
+    robot_pose_yaw = []
+
+    tag_id = []
+    tag_pose_x = []
+    tag_pose_y = []
+    tag_pose_z = []
+
+    # estimate tag to robot
+    if len(valid_detections) > 0:
+        for detection in valid_detections:
+            # wpi math
+            tag_values = tag_dictionary['tags'][detection.getId() - 1]['pose']
+            tag_translation = tag_values['translation']
+            tag_rotation = tag_values['rotation']['quaternion']
+            tag_translation_3d = Translation3d(tag_translation['x'], tag_translation['y'], tag_translation['z'])
+            tag_rotation_3d = Rotation3d(
+                Quaternion(tag_rotation['W'], tag_rotation['X'], tag_rotation['Y'], tag_rotation['Z']))
+            tag_pose = Pose3d(tag_translation_3d, tag_rotation_3d)
+            camera_to_tag_estimate = detector.estimatePose(detection)
+
+            # camera rotation
+            cam_rotation = camera_to_tag_estimate.rotation()
+            cam_inv_rotation = camera_to_tag_estimate.inverse().rotation()
+            rotated_camera_to_tag_estimate = Transform3d(camera_to_tag_estimate.translation(), cam_rotation)
+
+            # changes tag coordinate system to wpi system
+            wpi_translation = CoordinateSystem.convert(camera_to_tag_estimate.translation().rotateBy(cam_inv_rotation),
+                                                       CoordinateSystem.EDN(),
+                                                       CoordinateSystem.NWU())
+
+            # robot pose
+            estimated_robot_transform = tag_pose.transformBy(Transform3d(wpi_translation, Rotation3d())).transformBy(
+                camera_to_robot_transform)
+            estimated_robot_pose = Pose3d(estimated_robot_transform.translation(), cam_rotation)
+
+            tag_corners = [detection.getCorner(0), detection.getCorner(1), detection.getCorner(2),
+                           detection.getCorner(3)]
+
+            detected_tag = {
+                "tag": detection,
+                "corners": tag_corners,
+                "tagPose": tag_pose,
+                "tagTranslation": rotated_camera_to_tag_estimate,
+                "wpiCameraToTag": estimated_robot_transform,
+                "estimatedRobotPose": estimated_robot_pose
+            }
+
+            detected_tags.append(detected_tag)
+
+    # adding estimated pose from tag
+    detected_tags = sorted(detected_tags, key=lambda d: d['tag'].getDecisionMargin(), reverse=True)
+    for detectedTag in detected_tags:
+        robot_pose_x.append(detectedTag["estimatedRobotPose"].translation().x)
+        robot_pose_y.append(detectedTag["estimatedRobotPose"].translation().y)
+        robot_pose_yaw.append(detectedTag["estimatedRobotPose"].rotation().y_degrees)
+        tag_pose_x.append(detectedTag["tagPose"].translation().x)
+        tag_pose_y.append(detectedTag["tagPose"].translation().y)
+        tag_pose_z.append(detectedTag["tagPose"].translation().z)
+        tag_id.append(detectedTag["tag"].getId())
+
+
 def point_dist(p1: robotpy_apriltag.AprilTagDetection.Point, p2: robotpy_apriltag.AprilTagDetection.Point):
     return ((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2) ** 0.5
+
+
+def init_network_tables():
+    nt_instance = NetworkTableInstance.getDefault()
+    identity = f"{basename(__file__)}-{os.getpid()}"
+    nt_instance.startClient4(identity)
+    nt_instance.setServer("10.42.1.2")
+    hostname = socket.gethostname()
+    ip = socket.gethostbyname(hostname)
+
+    secondary_ips = [
+        ip
+        # '10.42.1.2',
+        # ('127.0.0.1', 57599),
+        # ('localhost', 57823)
+        # '10.0.0.2',
+        # '192.168.100.25'
+        # '192.168.100.25'
+        # '172.22.64.1'
+        # '169.254.254.200'
+    ]
+    tries = 0
+    time.sleep(1)
+    while not nt_instance.isConnected():
+        log.debug("Could not connect to team client. Trying other addresses...")
+        nt_instance.setServer(secondary_ips[tries])
+
+        time.sleep(1)
+        if nt_instance.isConnected():
+            log.info("Found NT Server at {}".format(secondary_ips[tries]))
+            break
+        tries += 1
+        if tries >= len(secondary_ips):
+            log.error("Could not connect to NetworkTables...")
+            break
+
+    return nt_instance
+
+
+def generateCameraParameters(device_id):
+    device_type = 'Left_Localizers'
+    if device_id in constants.CAMERAS['Right_Localizers']['ids'].keys():
+        device_type = 'Right_Localizers'
+    device_params = constants.CAMERAS[device_type]
+    device_name = device_params['ids'][device_id]
+
+    i_matrix = constants.CAMERA_PARAMS[device_name]["camera_matrix"][device_id]
+
+    if i_matrix.shape == (1, 9) or i_matrix.shape == (9, 1):
+        i_matrix.reshape([3, 3])
+
+    if i_matrix.shape != (3, 3):
+        print("ERROR: camera iMatrix is not a 3x3 matrix!")
+
+    hfov = constants.CAMERA_PARAMS[device_name]["mono"]["hfov"]
+    vfov = constants.CAMERA_PARAMS[device_name]["mono"]["vfov"]
+
+    camera_params = {
+        "device_id": device_id,
+        "device_name": device_name,
+        "device_type": device_type,
+        "id": 0,
+        "nt_name": device_params['nt_name'],
+        "hfov": hfov,
+        "vfov": vfov,
+        "height": constants.CAMERA_PARAMS[device_name]["height"],
+        "width": constants.CAMERA_PARAMS[device_name]["width"],
+        "fps": constants.CAMERA_PARAMS[device_name]["fps"],
+        "pixelFormat": constants.CAMERA_PARAMS[device_name]["pixelFormat"],
+        "exposure_auto": 0,
+        "exposure": 0.1,
+        "gain": 200,
+        "mount_angle_radians": math.radians(device_params['mount_angle'][0]),
+        "iMatrix": np.array(i_matrix).reshape(3, 3),
+        # fx, fy, cx, cy
+        "intrinsicValues": (i_matrix[0][0], i_matrix[1][1], i_matrix[0][2], i_matrix[1][2]),
+        "hfl": constants.CAMERA_PARAMS[device_name]["width"] / (2 * math.tan(math.radians(hfov) / 2)),
+        "vfl": constants.CAMERA_PARAMS[device_name]["height"] / (2 * math.tan(math.radians(vfov) / 2))
+    }
+
+    return camera_params
 
 
 if __name__ == "__main__":
