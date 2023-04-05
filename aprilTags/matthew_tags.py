@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from ntcore._ntcore import NetworkTableInstance
 from wpimath.geometry import Pose3d, Rotation3d, Translation3d, Quaternion, CoordinateSystem, Transform3d
 
-from aprilTags import tag_dictionary
+from aprilTags.tag_dictionary import TAG_DICTIONARY as tag_dictionary
 from aprilTags.UsbHost import log, args
 from common import constants
 
@@ -64,13 +64,13 @@ def save_frame_every_second(output_folder: pathlib.Path, capture_duration: float
 
 
 def loop_save_frames_with_text():
-    output_folder = pathlib.Path("captured_frames")
+    output_folder = pathlib.Path("aprilTags/captured_frames")
     capture_duration = 60  # Capture images for 60 seconds
     save_frame_every_second(output_folder, capture_duration)
 
 
 def show_frame():
-    frame_directory = pathlib.Path('captured_frames')
+    frame_directory = pathlib.Path('aprilTags/captured_frames')
     for image_file in frame_directory.glob('*.png'):
         image = cv2.imread(str(image_file))
         image = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
@@ -102,7 +102,8 @@ def show_frame():
         valid_detections = tag_filter(detections)
 
         # calls tag estimator
-        tag_estimate(valid_detections, detector, image, estimator)
+        estimated_detections = tag_estimate(valid_detections, detector, image, estimator)
+        print(estimated_detections)
 
         # for detections in valid_detections:
         #     print(estimator.estimate(detections))
@@ -120,6 +121,9 @@ def tag_filter(detections: typing.List[robotpy_apriltag.AprilTagDetection.Point]
     valid_detections = []
     if len(detections) > 0:
         for tag in detections:
+            if tag.getId() not in range(1, 8):
+                continue
+
             tag_corners = [tag.getCorner(0), tag.getCorner(1), tag.getCorner(2), tag.getCorner(3)]
 
             # finds diff of right/left sides
@@ -196,7 +200,7 @@ def tag_estimate(valid_detections, detector, image, estimator):
             tag_rotation_3d = Rotation3d(
                 Quaternion(tag_rotation['W'], tag_rotation['X'], tag_rotation['Y'], tag_rotation['Z']))
             tag_pose = Pose3d(tag_translation_3d, tag_rotation_3d)
-            camera_to_tag_estimate = detector.estimatePose(detection)
+            camera_to_tag_estimate = estimator.estimate(detection)
 
             # camera rotation
             cam_rotation = camera_to_tag_estimate.rotation()
@@ -237,6 +241,8 @@ def tag_estimate(valid_detections, detector, image, estimator):
         tag_pose_y.append(detectedTag["tagPose"].translation().y)
         tag_pose_z.append(detectedTag["tagPose"].translation().z)
         tag_id.append(detectedTag["tag"].getId())
+
+    return detected_tags
 
 
 def point_dist(p1: robotpy_apriltag.AprilTagDetection.Point, p2: robotpy_apriltag.AprilTagDetection.Point):
