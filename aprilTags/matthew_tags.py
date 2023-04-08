@@ -15,10 +15,10 @@ import robotpy_apriltag
 from icecream import ic
 
 import matplotlib.pyplot as plt
-from ntcore._ntcore import NetworkTableInstance
+from ntcore import NetworkTableInstance
 from wpimath.geometry import Pose3d, Rotation3d, Translation3d, Quaternion, CoordinateSystem, Transform3d
 
-from aprilTags.tag_dictionary import TAG_DICTIONARY as tag_dictionary
+import aprilTags.tag_dictionary
 from aprilTags.UsbHost import log, args
 from common import constants
 
@@ -102,11 +102,8 @@ def show_frame():
         valid_detections = tag_filter(detections)
 
         # calls tag estimator
-        estimated_detections = tag_estimate(valid_detections, detector, image, estimator)
+        estimated_detections = tag_estimate(valid_detections, estimator)
         print(estimated_detections)
-
-        # for detections in valid_detections:
-        #     print(estimator.estimate(detections))
 
         # cycle images
         cv2.imshow(str(image_file), image)
@@ -158,10 +155,10 @@ def tag_filter(detections: typing.List[robotpy_apriltag.AprilTagDetection.Point]
     return valid_detections
 
 
-def tag_estimate(valid_detections, detector, image, estimator):
+def tag_estimate(valid_detections, estimator):
     # network table setup
     device_name = args.dev
-    camera_params = generateCameraParameters(device_name)
+    camera_params = generate_camera_parameters(device_name)
     nt_instance = init_network_tables()
     nt_drivetrain_tab = nt_instance.getTable("Swerve")
     nt_apriltag_tab = nt_instance.getTable(camera_params["nt_name"])
@@ -170,6 +167,18 @@ def tag_estimate(valid_detections, detector, image, estimator):
         'Roll': nt_drivetrain_tab.getDoubleTopic("Roll").subscribe(0),
         'Yaw': nt_drivetrain_tab.getDoubleTopic("Yaw").subscribe(0),
         'camToRobotT3D': nt_apriltag_tab.getDoubleArrayTopic("camToRobotT3D").subscribe([0, 0, 0, 0, 0, 0]),
+    }
+
+    nt_pubs = {
+        'tv': nt_apriltag_tab.getIntegerTopic("tv").publish(),
+        'tid': nt_apriltag_tab.getIntegerArrayTopic("tid").publish(),
+        'rPosX': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose X").publish(),
+        'rPosY': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose Y").publish(),
+        'rPosYaw': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose Yaw").publish(),
+        'tPosX': nt_apriltag_tab.getDoubleArrayTopic("Tag Pose X").publish(),
+        'tPosY': nt_apriltag_tab.getDoubleArrayTopic("Tag Pose Y").publish(),
+        'latency': nt_apriltag_tab.getDoubleTopic("latency").publish(),
+        'botpose': nt_apriltag_tab.getDoubleArrayTopic("botpose").publish(),
     }
 
     camera_to_robot_v = nt_subs['camToRobotT3D'].get()
@@ -193,7 +202,7 @@ def tag_estimate(valid_detections, detector, image, estimator):
     if len(valid_detections) > 0:
         for detection in valid_detections:
             # wpi math
-            tag_values = tag_dictionary['tags'][detection.getId() - 1]['pose']
+            tag_values = aprilTags.tag_dictionary.TAG_DICTIONARY['tags'][detection.getId() - 1]['pose']
             tag_translation = tag_values['translation']
             tag_rotation = tag_values['rotation']['quaternion']
             tag_translation_3d = Translation3d(tag_translation['x'], tag_translation['y'], tag_translation['z'])
@@ -242,6 +251,22 @@ def tag_estimate(valid_detections, detector, image, estimator):
         tag_pose_z.append(detectedTag["tagPose"].translation().z)
         tag_id.append(detectedTag["tag"].getId())
 
+    latency = np.array([0])
+
+    bot_pose = [np.average(robot_pose_x), np.average(robot_pose_y), 0,
+                0, 0, np.average(robot_pose_yaw),
+                latency[-1]]
+
+    nt_pubs["tv"].set(1 if len(tag_id) > 0 else 0)
+    nt_pubs["tid"].set(tag_id)
+    nt_pubs["rPosX"].set(robot_pose_x)
+    nt_pubs["rPosY"].set(robot_pose_y)
+    nt_pubs["rPosYaw"].set(robot_pose_yaw)
+    nt_pubs["tPosX"].set(tag_pose_x)
+    nt_pubs["tPosY"].set(tag_pose_y)
+    nt_pubs["latency"].set(latency[-1])
+    nt_pubs["botpose"].set(bot_pose)
+
     return detected_tags
 
 
@@ -286,7 +311,7 @@ def init_network_tables():
     return nt_instance
 
 
-def generateCameraParameters(device_id):
+def generate_camera_parameters(device_id):
     device_type = 'Left_Localizers'
     if device_id in constants.CAMERAS['Right_Localizers']['ids'].keys():
         device_type = 'Right_Localizers'
