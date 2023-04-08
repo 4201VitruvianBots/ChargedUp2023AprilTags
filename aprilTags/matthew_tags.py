@@ -2,6 +2,7 @@ import copy
 import math
 import pathlib
 import socket
+import sys
 from os.path import basename
 
 import cv2
@@ -12,15 +13,13 @@ import typing
 import numpy as np
 import robotpy_apriltag
 
-from icecream import ic
-
-import matplotlib.pyplot as plt
 from ntcore import NetworkTableInstance
 from wpimath.geometry import Pose3d, Rotation3d, Translation3d, Quaternion, CoordinateSystem, Transform3d
 
 import aprilTags.tag_dictionary
 from aprilTags.UsbHost import log, args
-from common import constants
+from common import constants, utils
+from common.cvUtils import TargetDrawer
 
 
 def save_frame_every_second(output_folder: pathlib.Path, capture_duration: float = 60):
@@ -178,7 +177,7 @@ def tag_estimate(valid_detections, estimator):
         'tPosX': nt_apriltag_tab.getDoubleArrayTopic("Tag Pose X").publish(),
         'tPosY': nt_apriltag_tab.getDoubleArrayTopic("Tag Pose Y").publish(),
         'latency': nt_apriltag_tab.getDoubleTopic("latency").publish(),
-        'botpose': nt_apriltag_tab.getDoubleArrayTopic("botpose").publish(),
+        'bot-pose': nt_apriltag_tab.getDoubleArrayTopic("bot-pose").publish(),
     }
 
     camera_to_robot_v = nt_subs['camToRobotT3D'].get()
@@ -229,13 +228,17 @@ def tag_estimate(valid_detections, estimator):
             tag_corners = [detection.getCorner(0), detection.getCorner(1), detection.getCorner(2),
                            detection.getCorner(3)]
 
+            # detected tag data
             detected_tag = {
                 "tag": detection,
                 "corners": tag_corners,
                 "tagPose": tag_pose,
                 "tagTranslation": rotated_camera_to_tag_estimate,
                 "wpiCameraToTag": estimated_robot_transform,
-                "estimatedRobotPose": estimated_robot_pose
+                "estimatedRobotPose": estimated_robot_pose,
+                'robot_pose_x': robot_pose_x,
+                'robot_pose_y': robot_pose_y,
+                'robot_pose_z': robot_pose_z,
             }
 
             detected_tags.append(detected_tag)
@@ -251,12 +254,24 @@ def tag_estimate(valid_detections, estimator):
         tag_pose_z.append(detectedTag["tagPose"].translation().z)
         tag_id.append(detectedTag["tag"].getId())
 
+    # latency for wpi
     latency = np.array([0])
+    last_time_stamp = 0
+    time_stamp = time.time_ns()
+    fps = utils.FPSHandler()
+    fps_value = fps.fps()
+    if last_time_stamp != 0:
+        latency_ms = (time_stamp - last_time_stamp) / 1000000.0
+        latency = np.append(latency, latency_ms)
+    avg_latency = np.average(latency) if len(latency) < 100 else np.average(latency[-100:])
+    last_time_stamp = time_stamp
 
+    # average bot pose
     bot_pose = [np.average(robot_pose_x), np.average(robot_pose_y), 0,
                 0, 0, np.average(robot_pose_yaw),
                 latency[-1]]
 
+    # publish pose data on network table
     nt_pubs["tv"].set(1 if len(tag_id) > 0 else 0)
     nt_pubs["tid"].set(tag_id)
     nt_pubs["rPosX"].set(robot_pose_x)
@@ -265,7 +280,7 @@ def tag_estimate(valid_detections, estimator):
     nt_pubs["tPosX"].set(tag_pose_x)
     nt_pubs["tPosY"].set(tag_pose_y)
     nt_pubs["latency"].set(latency[-1])
-    nt_pubs["botpose"].set(bot_pose)
+    nt_pubs["bot-pose"].set(bot_pose)
 
     return detected_tags
 
