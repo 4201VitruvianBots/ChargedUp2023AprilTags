@@ -59,6 +59,7 @@ def init_network_tables():
     return nt_instance
 
 
+# network table setup
 nt_instance = init_network_tables()
 nt_drivetrain_tab = nt_instance.getTable("Swerve")
 nt_apriltag_tab = nt_instance.getTable("Shuffleboard")
@@ -215,7 +216,6 @@ def tag_filter(detections: typing.List[robotpy_apriltag.AprilTagDetection.Point]
 
 
 def tag_estimate(valid_detections, estimator):
-    # network table setup
     device_name = args.dev
     camera_params = generate_camera_parameters(device_name)
 
@@ -321,11 +321,12 @@ def tag_estimate(valid_detections, estimator):
     nt_pubs["latency"].set(latency[-1])
     nt_pubs["bot-pose"].set(bot_pose)
 
-    return detected_tags
+    return  
 
 
 def point_dist(p1: robotpy_apriltag.AprilTagDetection.Point, p2: robotpy_apriltag.AprilTagDetection.Point):
     return ((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2) ** 0.5
+
 
 def generate_camera_parameters(device_id):
     device_type = 'Left_Localizers'
