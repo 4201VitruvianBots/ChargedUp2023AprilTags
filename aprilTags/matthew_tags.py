@@ -22,6 +22,66 @@ from common import constants, utils
 from common.cvUtils import TargetDrawer
 
 
+def init_network_tables():
+    nt_instance = NetworkTableInstance.getDefault()
+    identity = f"{basename(__file__)}-{os.getpid()}"
+    nt_instance.startClient4(identity)
+    nt_instance.setServer("10.42.1.2")
+    hostname = socket.gethostname()
+    ip = socket.gethostbyname(hostname)
+
+    secondary_ips = [
+        ip
+        # '10.42.1.2',
+        # ('127.0.0.1', 57599),
+        # ('localhost', 57823)
+        # '10.0.0.2',
+        # '192.168.100.25'
+        # '192.168.100.25'
+        # '172.22.64.1'
+        # '169.254.254.200'
+    ]
+    tries = 0
+    time.sleep(1)
+    while not nt_instance.isConnected():
+        log.debug("Could not connect to team client. Trying other addresses...")
+        nt_instance.setServer(secondary_ips[tries])
+
+        time.sleep(1)
+        if nt_instance.isConnected():
+            log.info("Found NT Server at {}".format(secondary_ips[tries]))
+            break
+        tries += 1
+        if tries >= len(secondary_ips):
+            log.error("Could not connect to NetworkTables...")
+            break
+
+    return nt_instance
+
+
+nt_instance = init_network_tables()
+nt_drivetrain_tab = nt_instance.getTable("Swerve")
+nt_apriltag_tab = nt_instance.getTable("Shuffleboard")
+nt_subs = {
+    'Pitch': nt_drivetrain_tab.getDoubleTopic("Pitch").subscribe(0),
+    'Roll': nt_drivetrain_tab.getDoubleTopic("Roll").subscribe(0),
+    'Yaw': nt_drivetrain_tab.getDoubleTopic("Yaw").subscribe(0),
+    'camToRobotT3D': nt_apriltag_tab.getDoubleArrayTopic("camToRobotT3D").subscribe([0, 0, 0, 0, 0, 0]),
+}
+
+nt_pubs = {
+    'tv': nt_apriltag_tab.getIntegerTopic("tv").publish(),
+    'tid': nt_apriltag_tab.getIntegerArrayTopic("tid").publish(),
+    'rPosX': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose X").publish(),
+    'rPosY': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose Y").publish(),
+    'rPosYaw': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose Yaw").publish(),
+    'tPosX': nt_apriltag_tab.getDoubleArrayTopic("Tag Pose X").publish(),
+    'tPosY': nt_apriltag_tab.getDoubleArrayTopic("Tag Pose Y").publish(),
+    'latency': nt_apriltag_tab.getDoubleTopic("latency").publish(),
+    'bot-pose': nt_apriltag_tab.getDoubleArrayTopic("bot-pose").publish(),
+}
+
+
 def save_frame_every_second(output_folder: pathlib.Path, capture_duration: float = 60):
     # Ensure the output folder exists
     if not os.path.exists(output_folder):
@@ -158,27 +218,6 @@ def tag_estimate(valid_detections, estimator):
     # network table setup
     device_name = args.dev
     camera_params = generate_camera_parameters(device_name)
-    nt_instance = init_network_tables()
-    nt_drivetrain_tab = nt_instance.getTable("Swerve")
-    nt_apriltag_tab = nt_instance.getTable(camera_params["nt_name"])
-    nt_subs = {
-        'Pitch': nt_drivetrain_tab.getDoubleTopic("Pitch").subscribe(0),
-        'Roll': nt_drivetrain_tab.getDoubleTopic("Roll").subscribe(0),
-        'Yaw': nt_drivetrain_tab.getDoubleTopic("Yaw").subscribe(0),
-        'camToRobotT3D': nt_apriltag_tab.getDoubleArrayTopic("camToRobotT3D").subscribe([0, 0, 0, 0, 0, 0]),
-    }
-
-    nt_pubs = {
-        'tv': nt_apriltag_tab.getIntegerTopic("tv").publish(),
-        'tid': nt_apriltag_tab.getIntegerArrayTopic("tid").publish(),
-        'rPosX': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose X").publish(),
-        'rPosY': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose Y").publish(),
-        'rPosYaw': nt_apriltag_tab.getDoubleArrayTopic("Robot Pose Yaw").publish(),
-        'tPosX': nt_apriltag_tab.getDoubleArrayTopic("Tag Pose X").publish(),
-        'tPosY': nt_apriltag_tab.getDoubleArrayTopic("Tag Pose Y").publish(),
-        'latency': nt_apriltag_tab.getDoubleTopic("latency").publish(),
-        'bot-pose': nt_apriltag_tab.getDoubleArrayTopic("bot-pose").publish(),
-    }
 
     camera_to_robot_v = nt_subs['camToRobotT3D'].get()
     camera_to_robot_transform = Transform3d(
@@ -287,44 +326,6 @@ def tag_estimate(valid_detections, estimator):
 
 def point_dist(p1: robotpy_apriltag.AprilTagDetection.Point, p2: robotpy_apriltag.AprilTagDetection.Point):
     return ((p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2) ** 0.5
-
-
-def init_network_tables():
-    nt_instance = NetworkTableInstance.getDefault()
-    identity = f"{basename(__file__)}-{os.getpid()}"
-    nt_instance.startClient4(identity)
-    nt_instance.setServer("10.42.1.2")
-    hostname = socket.gethostname()
-    ip = socket.gethostbyname(hostname)
-
-    secondary_ips = [
-        ip
-        # '10.42.1.2',
-        # ('127.0.0.1', 57599),
-        # ('localhost', 57823)
-        # '10.0.0.2',
-        # '192.168.100.25'
-        # '192.168.100.25'
-        # '172.22.64.1'
-        # '169.254.254.200'
-    ]
-    tries = 0
-    time.sleep(1)
-    while not nt_instance.isConnected():
-        log.debug("Could not connect to team client. Trying other addresses...")
-        nt_instance.setServer(secondary_ips[tries])
-
-        time.sleep(1)
-        if nt_instance.isConnected():
-            log.info("Found NT Server at {}".format(secondary_ips[tries]))
-            break
-        tries += 1
-        if tries >= len(secondary_ips):
-            log.error("Could not connect to NetworkTables...")
-            break
-
-    return nt_instance
-
 
 def generate_camera_parameters(device_id):
     device_type = 'Left_Localizers'
