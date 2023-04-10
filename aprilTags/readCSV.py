@@ -13,7 +13,7 @@ def load_data(filename):
         return my_list
 
 
-def reformat_row(row):
+def filter_data(row):
     # csv index 11
     row_one = row[0]
 
@@ -25,26 +25,41 @@ def reformat_row(row):
 
     # removes every value except for numbers
     for row in row_one:
-        row.replace(' ', '')
         if row == row_one[0]:
-            row.replace('data:', '')
-
-        fix_row.append(row)
+            remove_space = row.replace('data: [', '')
+            fix_row.append(remove_space.replace(' ', ''))
+            continue
+        if row == row_one[1] or row == row_one[3]:
+            remove_space = row.replace('.', '')
+            fix_row.append(remove_space.replace(' ', ''))
+            continue
+        remove_space = row.replace(' ', '')
+        fix_row.append(remove_space)
+        continue
 
     for row in row_two:
-        row.replace(' ', '')
+        if row == row_two[2] or row == row_two[3]:
+            remove_space = row.replace('.', '')
+            fix_row.append(remove_space.replace(' ', ''))
+            continue
+        if row == row_two[4]:
+            remove_space = row.replace(' ', '')
+            fix_row.append(remove_space.replace('.]', ''))
+            continue
+        remove_space = row.replace(' ', '')
+        fix_row.append(remove_space)
+        continue
 
-        fix_row.append(row)
-
-    # new data array
     return fix_row
 
 
+# loads csv file
 new_list = load_data('OV2311_1.csv')
 
 # creates a new array with only index 11 and 12: camera_matrix's data
 new_row_list = [row for idx, row in enumerate(new_list) if idx in (11, 12)]
 
-# reformat camera_matrix data to only have numerical indexes
-new_row = reformat_row(new_row_list)
+# runs filter to remove extra strings or spaces in data
+new_row = filter_data(new_row_list)
+
 print(new_row)
