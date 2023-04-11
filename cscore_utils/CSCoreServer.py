@@ -7,6 +7,8 @@ import logging
 import numpy as np
 import threading
 
+from cscore_utils.CSCoreCamera import CSCoreCamera
+from cscore_utils.usbCameraUtils import generateCameraParameters
 
 log = logging.getLogger(__name__)
 c_handler = logging.StreamHandler()
@@ -81,3 +83,17 @@ class CSCoreServer:
                 self.cvSource.putFrame(self.frame)
             except Exception as e:
                 log.error("Could not send frame")
+
+
+if __name__ == '__main__':
+    # Test camera init
+    enable_threading = True
+    camera_params = generateCameraParameters("OV2311_1")
+    camera = CSCoreCamera(camera_params, enable_threading)
+
+    camera_stream = CSCoreServer(camera,
+                                 '192.168.2.1',
+                                 ports=[5800, 5801],
+                                 width=camera_params["width"],
+                                 height=camera_params["height"],
+                                 fps=camera_params["fps"])
