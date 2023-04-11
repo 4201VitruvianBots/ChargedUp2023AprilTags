@@ -53,8 +53,6 @@ parser.add_argument('-ip', dest='ip', action="store", type=str, help='Set IP Add
 parser.add_argument('-port', dest='ports', action="store", type=str, help='Set MJPEG Server Ports (default: 5800, 5801)', default="5800, 5801")
 parser.add_argument('-dev', dest='dev', action="store", type=str, help='Set Device Name (default: OV2311_1)', default="OV2311_1")
 parser.add_argument('-s', dest='strict', action="store_true", help='Enforce strict filtering locally', default=False)
-parser.add_argument('-o', dest='cam_orientation', action="store", help='Set camera orientation: (N)ormal, (U)pside-down (CW)lockwise (CCW)ounter-Clockwise)', default='N')
-
 
 args = parser.parse_args()
 
@@ -78,7 +76,6 @@ class AprilTagsUSBHost:
 
     def __init__(self):
         self.camera = None
-        self.camera_orientation = args.cam_orientation
         self.NT_Instance = self.init_networktables()
         if args.performance_test:
             disabledStdOut = logging.StreamHandler(stream=None)
@@ -308,7 +305,10 @@ class AprilTagsUSBHost:
         for detectedTag in detectedTags:
             robot_pose_x.append(detectedTag["estimatedRobotPose"].translation().x)
             robot_pose_y.append(detectedTag["estimatedRobotPose"].translation().y)
-            robot_pose_yaw.append(detectedTag["estimatedRobotPose"].rotation().y_degrees)
+            if 1 <= detectedTag["tag"].getId() <= 4:
+                robot_pose_yaw.append(detectedTag["estimatedRobotPose"].rotation().y_degrees + 180)
+            else:
+                robot_pose_yaw.append(detectedTag["estimatedRobotPose"].rotation().y_degrees)
             tag_pose_x.append(detectedTag["tagPose"].translation().x)
             tag_pose_y.append(detectedTag["tagPose"].translation().y)
             tag_pose_z.append(detectedTag["tagPose"].translation().z)
@@ -369,9 +369,14 @@ class AprilTagsUSBHost:
             robot_pose_y = [i for j, i in enumerate(robot_pose_y) if j not in rm_idx]
             robot_pose_yaw = [i for j, i in enumerate(robot_pose_yaw) if j not in rm_idx]
 
-        botPose = [np.average(robot_pose_x), np.average(robot_pose_y), 0,
-                   0, 0, np.average(robot_pose_yaw),
-                   self.latency[-1]]
+        if len(robot_pose_x) != 0:
+            botPose = [np.average(robot_pose_x), np.average(robot_pose_y), 0,
+                       0, 0, np.average(robot_pose_yaw),
+                       self.latency[-1]]
+        else:
+            botPose = [0, 0, 0,
+                       0, 0, 0,
+                       self.latency[-1]]
 
         self.nt_pubs["tv"].set(1 if len(tag_id) > 0 else 0)
         self.nt_pubs["tid"].set(tag_id)
@@ -393,13 +398,6 @@ class AprilTagsUSBHost:
             }
         }
 
-        if self.camera_orientation == 'CW':
-            monoFrame = cv2.rotate(monoFrame, cv2.ROTATE_90_CLOCKWISE)
-        elif self.camera_orientation == 'CCW':
-            monoFrame = cv2.rotate(monoFrame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        elif self.camera_orientation == 'U':
-            monoFrame = cv2.rotate(monoFrame, cv2.ROTATE_180)
-
         statText = [
             "FPS: {:.2f}".format(fpsValue),
             "Latency: {:.2f}ms".format(avgLatency)
@@ -408,22 +406,6 @@ class AprilTagsUSBHost:
 
         for detectedTag in detectedTags:
             points = np.array([(int(p.x), int(p.y)) for p in detectedTag["corners"]])
-
-            if self.camera_orientation == 'CW':
-                rotation = -math.pi/2.0
-                refPoint = Point(self.camera_params['width']/2.0, self.camera_params['height']/2.0)
-                points = [cvUtils.rotatePoint(p, refPoint, rotation) for p in detectedTag["corners"]]
-                points = np.array([(int(p.x), int(p.y)) for p in points])
-            # elif self.camera_orientation == 'CCW':
-            #     rotation = math.pi/2.0
-            #     refPoint = Point(self.camera_params['width']/2.0, self.camera_params['height']/2.0)
-            #     points = [cvUtils.rotatePoint(p, refPoint, rotation) for p in detectedTag["corners"]]
-            #     points = np.array([(int(p.x), int(p.y)) for p in points])
-            # elif self.camera_orientation == 'U':
-            #     rotation = math.pi
-            #     refPoint = Point(self.camera_params['width']/2.0, self.camera_params['height']/2.0)
-            #     points = [cvUtils.rotatePoint(p, refPoint, rotation) for p in detectedTag["corners"]]
-            #     points = np.array([(int(p.x), int(p.y)) for p in points])
 
             targetDrawer = TargetDrawer(points)
             targetDrawer.drawTargetLines(monoFrame)
@@ -526,8 +508,8 @@ class AprilTagsUSBHost:
         return NT_Instance
 
     def cameraSetup(self):
-        if platform.system() == 'Linux':
-            os.system('./../coprocessors/startup/initCameraSettings.sh')
+        # if platform.system() == 'Linux':
+        #     os.system('./../coprocessors/startup/initCameraSettings.sh')
         self.camera = CSCoreCamera(self.camera_params, True)
     
 

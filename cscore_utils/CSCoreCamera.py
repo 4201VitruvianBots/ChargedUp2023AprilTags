@@ -8,6 +8,8 @@ import cscore
 import cv2
 import numpy as np
 
+from cscore_utils.usbCameraUtils import generateCameraParameters
+
 log = logging.getLogger(__name__)
 c_handler = logging.StreamHandler()
 log.addHandler(c_handler)
@@ -92,5 +94,6 @@ class CSCoreCamera:
 if __name__ == '__main__':
     # Test camera init
     enable_threading = False
-    CSCoreCamera("usbcam", True)
+    camera_params = generateCameraParameters("OV2311_1")
+    CSCoreCamera(camera_params, True)
 
