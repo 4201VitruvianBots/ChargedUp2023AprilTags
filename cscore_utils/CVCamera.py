@@ -68,6 +68,8 @@ class CVCamera:
             if retval:
                 self.frame = frame
                 self.timestamp = timestamp
+            else:
+                log.error("Error capturing frames")
 
     def getFrame(self):
         return self.timestamp, self.frame
