@@ -20,7 +20,6 @@ def generateCameraParameters(deviceID):
     if iMatrix.shape != (3, 3):
         print("ERROR: camera iMatrix is not a 3x3 matrix!")
 
-
     hfov = constants.CAMERA_PARAMS[deviceName]["mono"]["hfov"]
     vfov = constants.CAMERA_PARAMS[deviceName]["mono"]["vfov"]
 

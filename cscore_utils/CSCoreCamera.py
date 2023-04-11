@@ -43,6 +43,17 @@ class CSCoreCamera:
             # self.camera.setExposureAuto(0.25)
             self.camera.setExposureManual(-9)
             self.camera.setExposureHoldCurrent()
+        elif platform.system() == 'Linux':
+            settings = open("utils/{}_config.json".format(self.name))
+            self.jsonConfig = json.load(settings)
+            control = open("utils/{}_control.json".format(self.name))
+            self.jsonControl = json.load(control)
+
+            test = self.camera.setConfigJson(self.jsonConfig)
+            if not test:
+                log.warning("Camera {} config not applied".format(self.name))
+            self.camera.setExposureManual(-9)
+            self.camera.setExposureHoldCurrent()
 
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)

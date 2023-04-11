@@ -85,7 +85,7 @@ class AprilTagsUSBHost:
 
         self.DEBUG_VIDEO_OUTPUT = args.debug
         self.ENABLE_SOLVEPNP_VISUALIZATION = True
-        self.ENABL_LINUX_OPTIMIZATION = False
+        self.ENABLE_LINUX_OPTIMIZATION = False
         self.STRICT_FILTERING = args.strict
 
         self.valid_cameras = None
@@ -179,7 +179,7 @@ class AprilTagsUSBHost:
         frame = np.zeros(shape=(self.camera_params["height"], self.camera_params["width"], 1), dtype=np.uint8)
         while True:
             if self.camera is not None:
-                # if platform.system() == 'Linux' and self.ENABL_LINUX_OPTIMIZATION:
+                # if platform.system() == 'Linux' and self.ENABLE_LINUX_OPTIMIZATION:
                 #     retval, frame = self.camera.read()
                 #     timestamp = time.time_ns()
                 #     if not retval:
