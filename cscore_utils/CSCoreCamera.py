@@ -77,7 +77,6 @@ class CSCoreCamera:
         log.info("Done Setting Up CSCoreCamera")
 
     def _run(self):
-        img = None
         while True:
             timestamp, frame = self.cvSink.grabFrame(self.frame)
 
@@ -108,22 +107,27 @@ if __name__ == '__main__':
     camera_params = generateCameraParameters("OV2311_1")
     camera = CSCoreCamera(camera_params, enable_threading)
 
-    while True:
-        test = camera.getFrame()
-        print(test)
-    # mjpegServer = cscore.MjpegServer("test", 5800)
-    # cvSource = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
-    # mjpegServer.setSource(cvSource)
-    #
-    # cscore.CameraServer.addServer(mjpegServer)
-    # test = np.zeros(shape=(1600, 1200, 3), dtype=np.uint8)
-    # print("Start Capture...")
     # while True:
-    #     time, test = camera.getCvsink().grabFrame(test)
-    #     if time == 0:
-    #         print("error:", camera.getCvsink().getError())
-    #         continue
+    #     timestamp, test = camera.getFrame()
+    #     cv2.imshow("Test", test)
     #
-    #     print("got frame at time", time, test.shape)
-    #
-    #     cvSource.putFrame(test)
+    #     key = cv2.waitKey(1)
+    #     if key == ord('q'):
+    #         break
+
+    mjpegServer = cscore.MjpegServer("test", 5800)
+    cvSource = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
+    mjpegServer.setSource(cvSource)
+
+    cscore.CameraServer.addServer(mjpegServer)
+    test = np.zeros(shape=(1600, 1200, 3), dtype=np.uint8)
+    print("Start Capture...")
+    while True:
+        time, test = camera.getCvsink().grabFrame(test)
+        if time == 0:
+            print("error:", camera.getCvsink().getError())
+            continue
+
+        print("got frame at time", time, test.shape)
+
+        cvSource.putFrame(test)
