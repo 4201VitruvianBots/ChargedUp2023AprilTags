@@ -29,8 +29,7 @@ class CSCoreCamera:
 
         log.info("Initializing Camera Settings")
         self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
-        videoMode = cscore.VideoMode(cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
-        self.camera.setVideoMode(videoMode)
+        self.camera.setVideoMode(cscore.VideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params['height'], camera_params['width'], camera_params['fps']))
         # if platform.system() == 'Windows':
         #     settings = open("utils/{}_config.json".format(self.name))
         #     self.jsonConfig = json.load(settings)
@@ -93,8 +92,8 @@ class CSCoreCamera:
     def getFrame(self):
         return self.timestamp, self.frame
 
-    # def getCvsink(self):
-    #     return self.cvSink
+    def getCvsink(self):
+        return self.cvSink
 
     def getCamera(self):
         return self.camera
@@ -105,7 +104,23 @@ class CSCoreCamera:
 
 if __name__ == '__main__':
     # Test camera init
-    enable_threading = False
+    enable_threading = True
     camera_params = generateCameraParameters("OV2311_1")
-    CSCoreCamera(camera_params, enable_threading)
+    camera = CSCoreCamera(camera_params, enable_threading)
 
+    mjpegServer = cscore.MjpegServer("test", 5800)
+    cvSource = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
+    mjpegServer.setSource(cvSource)
+
+    cscore.CameraServer.addServer(mjpegServer)
+    test = np.zeros(shape=(1600, 1200, 3), dtype=np.uint8)
+    print("Start Capture...")
+    while True:
+        time, test = camera.getCvsink().grabFrame(test)
+        if time == 0:
+            print("error:", camera.getCvsink().getError())
+            continue
+
+        print("got frame at time", time, test.shape)
+
+        cvSource.putFrame(test)
