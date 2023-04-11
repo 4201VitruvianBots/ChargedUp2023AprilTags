@@ -16,11 +16,9 @@ c_handler = logging.StreamHandler()
 log.addHandler(c_handler)
 log.setLevel(logging.DEBUG)
 
-enable_threading = True
-
 
 class CSCoreCamera:
-    def __init__(self, camera_params):
+    def __init__(self, camera_params, enable_threading=True):
         self.name = camera_params["device_id"]
         deviceId = 0
         for caminfo in cscore.UsbCamera.enumerateUsbCameras():
@@ -63,6 +61,10 @@ class CSCoreCamera:
         log.info("Initializing CV Sink")
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)
+        # self.cap = cv2.VideoCapture(0)
+        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)
+        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
+        # self.cap.set(cv2.CAP_PROP_FPS, 50)
 
         self.frame = np.zeros([camera_params['height'], camera_params['width'], 3], dtype=np.uint8)
 
@@ -76,6 +78,7 @@ class CSCoreCamera:
         log.info("Done Setting Up CSCoreCamera")
 
     def _run(self):
+        img = None
         while True:
             timestamp, frame = self.cvSink.grabFrame(self.frame)
 
@@ -84,16 +87,14 @@ class CSCoreCamera:
                 self.timestamp = 0
                 continue
 
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-
             self.frame = frame
             self.timestamp = timestamp
 
     def getFrame(self):
         return self.timestamp, self.frame
 
-    def getCvsink(self):
-        return self.cvSink
+    # def getCvsink(self):
+    #     return self.cvSink
 
     def getCamera(self):
         return self.camera
@@ -106,5 +107,5 @@ if __name__ == '__main__':
     # Test camera init
     enable_threading = False
     camera_params = generateCameraParameters("OV2311_1")
-    CSCoreCamera(camera_params)
+    CSCoreCamera(camera_params, enable_threading)
 
