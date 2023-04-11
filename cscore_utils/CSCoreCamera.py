@@ -3,6 +3,7 @@ import logging
 import os
 import platform
 from threading import Thread
+import time
 
 import cscore
 import cv2
@@ -29,8 +30,10 @@ class CSCoreCamera:
         self.camera = cscore.UsbCamera(self.name, deviceId)
 
         log.info("Initializing Camera Settings")
-        self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
         self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
+        time.sleep(1)
+        self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
+        time.sleep(1)
         # if platform.system() == 'Windows':
         #     settings = open("utils/{}_config.json".format(self.name))
         #     self.jsonConfig = json.load(settings)
