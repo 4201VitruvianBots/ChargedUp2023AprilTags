@@ -321,7 +321,7 @@ def tag_estimate(valid_detections, estimator):
     nt_pubs["latency"].set(latency[-1])
     nt_pubs["bot-pose"].set(bot_pose)
 
-    return  
+    return detected_tags
 
 
 def point_dist(p1: robotpy_apriltag.AprilTagDetection.Point, p2: robotpy_apriltag.AprilTagDetection.Point):
