@@ -25,13 +25,18 @@ class CVCamera:
         self.camera = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, camera_params['width'], camera_params['height'], camera_params['fps'])
 
         log.info("Setting up camera settings...")
+        self.FPS_MS = int(1/camera_params['fps'] * 1000)
         if platform.system() == 'Windows':
-            self.cap = cv2.VideoCapture(deviceId)
+            self.cap = cv2.VideoCapture(deviceId, cv2.CAP_MSMF)
 
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_params['height'])
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_params['width'])
             self.cap.set(cv2.CAP_PROP_FPS, camera_params['fps'])
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('m', 'j', 'p', 'g'))
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+            # self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('y', 'u', 'y', 'V'))
+            # self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('Y', 'U', 'Y', 'V'))
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0)
             self.cap.set(cv2.CAP_PROP_SHARPNESS, 3)
             self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
@@ -51,12 +56,14 @@ class CVCamera:
             #                             "! image/jpeg,format=MJPG,width=" + str(camera_params['width']) +
             #                             ",height=" + str(camera_params['height']) +
             #                             " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
-            self.cap = cv2.VideoCapture(deviceId, cv2.CAP_DSHOW)
+            self.cap = cv2.VideoCapture(deviceId, cv2.CAP_V4L)
 
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_params['height'])
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_params['width'])
             self.cap.set(cv2.CAP_PROP_FPS, camera_params['fps'])
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('m', 'j', 'p', 'g'))
             self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
             self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0)
             self.cap.set(cv2.CAP_PROP_SHARPNESS, 3)
             self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
@@ -82,14 +89,16 @@ class CVCamera:
 
     def _run(self):
         while True:
-            retval, frame = self.cap.read(self.frame)
-            timestamp = time.time()
+            if self.cap.isOpened():
+                retval, frame = self.cap.read(self.frame)
+                timestamp = time.time()
 
-            if retval:
-                self.frame = frame
-                self.timestamp = timestamp
-            else:
-                log.error("Error capturing frames")
+                if retval:
+                    self.frame = frame
+                    self.timestamp = timestamp
+                else:
+                    log.error("Error capturing frames")
+                # time.sleep(self.FPS_MS)
 
     def getFrame(self):
         return self.timestamp, self.frame
@@ -116,7 +125,8 @@ if __name__ == '__main__':
     #         break
 
     mjpegServer = cscore.MjpegServer("test", 5800)
-    cvSource = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
+    videoMode = cscore.VideoMode(cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
+    cvSource = cscore.CvSource("cvsource", videoMode)
     mjpegServer.setSource(cvSource)
 
     cscore.CameraServer.addServer(mjpegServer)
