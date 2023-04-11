@@ -5,7 +5,7 @@ import cscore
 import cscore as cs
 import logging
 import numpy as np
-import threading
+from threading import Thread
 
 from cscore_utils.CSCoreCamera import CSCoreCamera
 from cscore_utils.usbCameraUtils import generateCameraParameters
@@ -65,7 +65,7 @@ class CSCoreServer:
         except Exception as e:
             log.error("Error Creating MJPEG Server: {}".format(e))
 
-        th = threading.Thread(target=self.run, daemon=True)
+        th = Thread(target=self.run, daemon=True)
         th.start()
 
         log.info("Done Setting Up CSCoreServer")
@@ -92,8 +92,13 @@ if __name__ == '__main__':
     camera = CSCoreCamera(camera_params, enable_threading)
 
     camera_stream = CSCoreServer(camera,
-                                 '192.168.2.1',
+                                 'localhost',
                                  ports=[5800, 5801],
                                  width=camera_params["width"],
                                  height=camera_params["height"],
                                  fps=camera_params["fps"])
+
+    while True:
+        timestamp, frame = camera.getFrame()
+        camera_stream.setFrame(frame)
+
