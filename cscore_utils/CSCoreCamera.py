@@ -29,7 +29,7 @@ class CSCoreCamera:
 
         log.info("Initializing Camera Settings")
         self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
-        self.camera.setVideoMode(cscore.VideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params['height'], camera_params['width'], camera_params['fps']))
+        self.camera.setVideoMode(cscore.VideoMode(cscore.VideoMode.PixelFormat.kYUYV, camera_params['height'], camera_params['width'], camera_params['fps']))
         # if platform.system() == 'Windows':
         #     settings = open("utils/{}_config.json".format(self.name))
         #     self.jsonConfig = json.load(settings)
