@@ -29,10 +29,9 @@ class CSCoreCamera:
         self.camera = cscore.UsbCamera(self.name, deviceId)
 
         log.info("Initializing Camera Settings")
+        self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
+        self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
         # if platform.system() == 'Windows':
-        #     self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
-        #     self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
-        #
         #     settings = open("utils/{}_config.json".format(self.name))
         #     self.jsonConfig = json.load(settings)
         #     control = open("utils/{}_control.json".format(self.name))
