@@ -101,16 +101,10 @@ class CSCoreCamera:
     def getName(self):
         return self.name
 
-    def getConfig(self):
-        return self.jsonConfig
-
-    def getControl(self):
-        return self.jsonControl
-
 
 if __name__ == '__main__':
     # Test camera init
     enable_threading = False
     camera_params = generateCameraParameters("OV2311_1")
-    CSCoreCamera(camera_params, True)
+    CSCoreCamera(camera_params)
 

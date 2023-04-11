@@ -515,7 +515,7 @@ class AprilTagsUSBHost:
     def cameraSetup(self):
         # if platform.system() == 'Linux':
         #     os.system('./../coprocessors/startup/initCameraSettings.sh')
-        self.camera = CSCoreCamera(self.camera_params, True)
+        self.camera = CSCoreCamera(self.camera_params)
     
 
 if __name__ == '__main__':
