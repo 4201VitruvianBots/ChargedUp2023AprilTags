@@ -66,6 +66,8 @@ class CSCoreServer:
         th = threading.Thread(target=self.run, daemon=True)
         th.start()
 
+        log.info("Done Setting Up CSCoreServer")
+
     def setFrame(self, frame):
         self.frame = frame
 
