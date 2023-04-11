@@ -108,19 +108,22 @@ if __name__ == '__main__':
     camera_params = generateCameraParameters("OV2311_1")
     camera = CSCoreCamera(camera_params, enable_threading)
 
-    mjpegServer = cscore.MjpegServer("test", 5800)
-    cvSource = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
-    mjpegServer.setSource(cvSource)
-
-    cscore.CameraServer.addServer(mjpegServer)
-    test = np.zeros(shape=(1600, 1200, 3), dtype=np.uint8)
-    print("Start Capture...")
     while True:
-        time, test = camera.getCvsink().grabFrame(test)
-        if time == 0:
-            print("error:", camera.getCvsink().getError())
-            continue
-
-        print("got frame at time", time, test.shape)
-
-        cvSource.putFrame(test)
+        test = camera.getFrame()
+        print(test)
+    # mjpegServer = cscore.MjpegServer("test", 5800)
+    # cvSource = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
+    # mjpegServer.setSource(cvSource)
+    #
+    # cscore.CameraServer.addServer(mjpegServer)
+    # test = np.zeros(shape=(1600, 1200, 3), dtype=np.uint8)
+    # print("Start Capture...")
+    # while True:
+    #     time, test = camera.getCvsink().grabFrame(test)
+    #     if time == 0:
+    #         print("error:", camera.getCvsink().getError())
+    #         continue
+    #
+    #     print("got frame at time", time, test.shape)
+    #
+    #     cvSource.putFrame(test)
