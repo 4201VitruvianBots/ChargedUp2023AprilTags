@@ -20,7 +20,7 @@ enable_threading = True
 
 
 class CSCoreCamera:
-    def __init__(self, camera_params, grayscale=False):
+    def __init__(self, camera_params):
         self.name = camera_params["device_id"]
         deviceId = 0
         for caminfo in cscore.UsbCamera.enumerateUsbCameras():
@@ -63,10 +63,8 @@ class CSCoreCamera:
         log.info("Initializing CV Sink")
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)
-        if grayscale:
-            self.frame = np.zeros([camera_params['height'], camera_params['width']], dtype=np.uint8)
-        else:
-            self.frame = np.zeros([camera_params['height'], camera_params['width'], 3], dtype=np.uint8)
+
+        self.frame = np.zeros([camera_params['height'], camera_params['width'], 3], dtype=np.uint8)
 
         self.timestamp = 0
         if enable_threading:
@@ -85,8 +83,8 @@ class CSCoreCamera:
                 log.error(self.cvSink.getError())
                 self.timestamp = 0
                 continue
-            if len(frame.shape) > 2:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
             self.frame = frame
             self.timestamp = timestamp
