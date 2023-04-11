@@ -51,7 +51,7 @@ class CVCamera:
             #                             "! image/jpeg,format=MJPG,width=" + str(camera_params['width']) +
             #                             ",height=" + str(camera_params['height']) +
             #                             " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
-            self.cap = cv2.VideoCapture(deviceId)
+            self.cap = cv2.VideoCapture(deviceId, cv2.CAP_DSHOW)
 
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_params['height'])
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_params['width'])
