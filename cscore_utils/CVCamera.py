@@ -28,7 +28,10 @@ class CVCamera:
         if platform.system() == 'Windows':
             self.cap = cv2.VideoCapture(deviceId)
 
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_params['height'])
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_params['width'])
             self.cap.set(cv2.CAP_PROP_FPS, camera_params['fps'])
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
             self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0)
             self.cap.set(cv2.CAP_PROP_SHARPNESS, 3)
             self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
@@ -41,13 +44,30 @@ class CVCamera:
             self.cap.set(cv2.CAP_PROP_HUE, 0)
             self.cap.set(cv2.CAP_PROP_SATURATION, 64)
         else:
-            self.cap = cv2.VideoCapture("v4l2src device=/dev/video" + str(deviceId) +
-                                        " extra_controls=\"c,exposure_auto=" + str(1) +
-                                        ",exposure_absolute=" + str(157) +
-                                        ",gain=" + str(0) + ",sharpness=0,brightness=0\"" +
-                                        "! image/jpeg,format=MJPG,width=" + str(camera_params['width']) +
-                                        ",height=" + str(camera_params['height']) +
-                                        " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
+            # self.cap = cv2.VideoCapture("v4l2src device=/dev/video" + str(deviceId) +
+            #                             " extra_controls=\"c,exposure_auto=" + str(1) +
+            #                             ",exposure_absolute=" + str(157) +
+            #                             ",gain=" + str(0) + ",sharpness=0,brightness=0\"" +
+            #                             "! image/jpeg,format=MJPG,width=" + str(camera_params['width']) +
+            #                             ",height=" + str(camera_params['height']) +
+            #                             " ! jpegdec ! video/x-raw ! appsink drop=1", cv2.CAP_GSTREAMER)
+            self.cap = cv2.VideoCapture(deviceId)
+
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_params['height'])
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_params['width'])
+            self.cap.set(cv2.CAP_PROP_FPS, camera_params['fps'])
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+            self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0)
+            self.cap.set(cv2.CAP_PROP_SHARPNESS, 3)
+            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
+            self.cap.set(cv2.CAP_PROP_EXPOSURE, 157)
+            self.cap.set(cv2.CAP_PROP_GAIN, 0)
+            self.cap.set(cv2.CAP_PROP_SHARPNESS, 3)
+            self.cap.set(cv2.CAP_PROP_AUTO_WB, 1)
+            self.cap.set(cv2.CAP_PROP_CONTRAST, 32)
+            self.cap.set(cv2.CAP_PROP_GAMMA, 100)
+            self.cap.set(cv2.CAP_PROP_HUE, 0)
+            self.cap.set(cv2.CAP_PROP_SATURATION, 64)
 
         self.frame = np.zeros([camera_params['height'], camera_params['width'], 3], dtype=np.uint8)
 
