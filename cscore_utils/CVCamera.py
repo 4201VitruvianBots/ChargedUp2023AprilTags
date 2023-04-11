@@ -25,9 +25,13 @@ class CVCamera:
         self.camera = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, camera_params['width'], camera_params['height'], camera_params['fps'])
 
         log.info("Setting up camera settings...")
-        self.cap = cv2.VideoCapture(deviceId)
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, camera_params['width'])
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, camera_params['height'])
+        if platform.system() == 'Windows':
+            self.cap = cv2.VideoCapture(deviceId)
+        else:
+            self.cap = cv2.VideoCapture("v4l2src device=/dev/video{} ! video/x-raw, width={}, height={} ! videoconvert ! video/x-raw,format=GRAY ! appsink".format(deviceId,
+                                                                                                                                                                   camera_params['width'],
+                                                                                                                                                                   camera_params['height']))
+
         self.cap.set(cv2.CAP_PROP_FPS, camera_params['fps'])
         self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0)
         self.cap.set(cv2.CAP_PROP_SHARPNESS, 3)
