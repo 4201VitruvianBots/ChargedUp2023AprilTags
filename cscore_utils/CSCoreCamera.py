@@ -28,6 +28,7 @@ class CSCoreCamera:
                 deviceId = caminfo.dev
         self.camera = cscore.UsbCamera(self.name, deviceId)
 
+        log.info("Initializing Camera Settings")
         self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"],
                                  camera_params["fps"])
         self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
@@ -44,6 +45,7 @@ class CSCoreCamera:
             self.camera.setExposureManual(-9)
             self.camera.setExposureHoldCurrent()
 
+        log.info("Initializing CV Sink")
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)
         if grayscale:
