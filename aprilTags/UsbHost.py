@@ -13,7 +13,8 @@ import socket
 import sys
 
 import robotpy_apriltag
-from wpimath.units import inchesToMeters
+
+from common.mathUtils import inchesToMeters
 
 Point = robotpy_apriltag.AprilTagDetection.Point
 
