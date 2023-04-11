@@ -29,21 +29,21 @@ class CSCoreCamera:
         self.camera = cscore.UsbCamera(self.name, deviceId)
 
         log.info("Initializing Camera Settings")
-        if platform.system() == 'Windows':
-            self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
-            self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
-
-            settings = open("utils/{}_config.json".format(self.name))
-            self.jsonConfig = json.load(settings)
-            control = open("utils/{}_control.json".format(self.name))
-            self.jsonControl = json.load(control)
-
-            test = self.camera.setConfigJson(self.jsonConfig)
-            if not test:
-                log.warning("Camera {} config not applied".format(self.name))
-            # self.camera.setExposureAuto(0.25)
-            self.camera.setExposureManual(-9)
-            self.camera.setExposureHoldCurrent()
+        # if platform.system() == 'Windows':
+        #     self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"], camera_params["fps"])
+        #     self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
+        #
+        #     settings = open("utils/{}_config.json".format(self.name))
+        #     self.jsonConfig = json.load(settings)
+        #     control = open("utils/{}_control.json".format(self.name))
+        #     self.jsonControl = json.load(control)
+        #
+        #     test = self.camera.setConfigJson(self.jsonConfig)
+        #     if not test:
+        #         log.warning("Camera {} config not applied".format(self.name))
+        #     # self.camera.setExposureAuto(0.25)
+        #     self.camera.setExposureManual(-9)
+        #     self.camera.setExposureHoldCurrent()
         # elif platform.system() == 'Linux':
         #     self.camera.getProperty('brightness').set(0)
         #     self.camera.getProperty('contrast').set(32)
