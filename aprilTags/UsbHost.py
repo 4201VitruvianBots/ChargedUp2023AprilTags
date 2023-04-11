@@ -105,6 +105,8 @@ class AprilTagsUSBHost:
 
         # camera setup
         self.camera_params = generateCameraParameters(self.device_name)
+
+        log.info("Initializing Camera")
         self.cameraSetup()
         
         self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
