@@ -179,22 +179,25 @@ class AprilTagsUSBHost:
         frame = np.zeros(shape=(self.camera_params["height"], self.camera_params["width"], 1), dtype=np.uint8)
         while True:
             if self.camera is not None:
-                if platform.system() == 'Linux' and self.ENABL_LINUX_OPTIMIZATION:
-                    retval, frame = self.camera.read()
-                    timestamp = time.time_ns()
-                    if not retval:
-                        print("Capture session failed, restarting")
-                        self.camera.release()
-                        self.camera = None  # Force reconnect
-                        time.sleep(2)
-                        continue
-                    #frame = cv2.imdecode(frame, cv2.IMREAD_GRAYSCALE)
-                    # log.info("Frame Shape: {}".format(frame.shape))
-                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                # if platform.system() == 'Linux' and self.ENABL_LINUX_OPTIMIZATION:
+                #     retval, frame = self.camera.read()
+                #     timestamp = time.time_ns()
+                #     if not retval:
+                #         print("Capture session failed, restarting")
+                #         self.camera.release()
+                #         self.camera = None  # Force reconnect
+                #         time.sleep(2)
+                #         continue
+                #     #frame = cv2.imdecode(frame, cv2.IMREAD_GRAYSCALE)
+                #     # log.info("Frame Shape: {}".format(frame.shape))
+                #     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+                #
+                #     self.process_results(frame, timestamp)
+                # else:
+                timestamp, frame = self.camera.getFrame()
 
-                    self.process_results(frame, timestamp)
-                else:
-                    timestamp, frame = self.camera.getFrame()
+                if len(np.shape(frame)) > 2:
+                    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
 
                 self.process_results(frame, timestamp)
             else:
