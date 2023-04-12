@@ -9,6 +9,7 @@ import cscore
 import cv2
 import numpy as np
 
+from common.utils import FPSHandler
 from cscore_utils.usbCameraUtils import generateCameraParameters
 
 log = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ class CSCoreCamera:
 
         log.info("Initializing Camera Settings")
         self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
-        self.camera.setVideoMode(cscore.VideoMode(cscore.VideoMode.PixelFormat.kYUYV, camera_params['height'], camera_params['width'], camera_params['fps']))
+        self.camera.setVideoMode(cscore.VideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params['height'], camera_params['width'], camera_params['fps']))
         # if platform.system() == 'Windows':
         #     settings = open("utils/{}_config.json".format(self.name))
         #     self.jsonConfig = json.load(settings)
@@ -68,6 +69,7 @@ class CSCoreCamera:
         self.frame = np.zeros([camera_params['height'], camera_params['width'], 3], dtype=np.uint8)
 
         self.timestamp = 0
+        self.fpsHandler = FPSHandler()
         if enable_threading:
             thread = Thread(target=self._run, daemon=True)
             thread.start()
@@ -85,6 +87,7 @@ class CSCoreCamera:
                 self.timestamp = 0
                 continue
 
+            self.fpsHandler.nextIter()
             self.frame = frame
             self.timestamp = timestamp
 
@@ -99,6 +102,9 @@ class CSCoreCamera:
 
     def getName(self):
         return self.name
+
+    def getFpsCounter(self):
+        return self.fpsHandler
 
 
 if __name__ == '__main__':
@@ -128,6 +134,6 @@ if __name__ == '__main__':
             print("error:", camera.getCvsink().getError())
             continue
 
-        print("got frame at time", time, test.shape)
-
+        # print("got frame at time", time, test.shape)
+        log.debug("FPS: {:02f}".format(camera.getFpsCounter().fps()))
         cvSource.putFrame(test)
