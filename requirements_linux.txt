@@ -1,0 +1,8 @@
+depthai
+numpy~=1.24.1
+opencv-contrib-python
+pyntcore
+#PyQt5~=5.15.7
+pyserial~=3.5
+robotpy-apriltag
+robotpy-cscore

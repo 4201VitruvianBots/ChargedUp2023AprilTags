@@ -3,21 +3,23 @@ import logging
 import os
 import platform
 from threading import Thread
+import time
 
 import cscore
 import cv2
 import numpy as np
+
+from common.utils import FPSHandler
+from cscore_utils.usbCameraUtils import generateCameraParameters
 
 log = logging.getLogger(__name__)
 c_handler = logging.StreamHandler()
 log.addHandler(c_handler)
 log.setLevel(logging.DEBUG)
 
-enable_threading = True
-
 
 class CSCoreCamera:
-    def __init__(self, camera_params, grayscale=False):
+    def __init__(self, camera_params, enable_threading=True):
         self.name = camera_params["device_id"]
         deviceId = 0
         for caminfo in cscore.UsbCamera.enumerateUsbCameras():
@@ -26,35 +28,55 @@ class CSCoreCamera:
                 deviceId = caminfo.dev
         self.camera = cscore.UsbCamera(self.name, deviceId)
 
-        self.camera.setVideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params["width"], camera_params["height"],
-                                 camera_params["fps"])
+        log.info("Initializing Camera Settings")
         self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
-        if platform.system() == 'Windows':
-            settings = open("utils/{}_config.json".format(self.name))
-            self.jsonConfig = json.load(settings)
-            control = open("utils/{}_control.json".format(self.name))
-            self.jsonControl = json.load(control)
+        self.camera.setVideoMode(cscore.VideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params['height'], camera_params['width'], camera_params['fps']))
+        # if platform.system() == 'Windows':
+        #     settings = open("utils/{}_config.json".format(self.name))
+        #     self.jsonConfig = json.load(settings)
+        #     control = open("utils/{}_control.json".format(self.name))
+        #     self.jsonControl = json.load(control)
+        #
+        #     test = self.camera.setConfigJson(self.jsonConfig)
+        #     if not test:
+        #         log.warning("Camera {} config not applied".format(self.name))
+        #     # self.camera.setExposureAuto(0.25)
+        #     self.camera.setExposureManual(-9)
+        #     self.camera.setExposureHoldCurrent()
+        # elif platform.system() == 'Linux':
+        self.camera.getProperty('brightness').set(0)
+        self.camera.getProperty('contrast').set(32)
+        self.camera.getProperty('saturation').set(64)
+        self.camera.getProperty('hue').set(0)
+        self.camera.getProperty('white_balance_temperature_auto').set(1)
+        self.camera.getProperty('gamma').set(100)
+        self.camera.getProperty('gain').set(0)
+        self.camera.getProperty('power_line_frequency').set(2)
+        self.camera.getProperty('sharpness').set(3)
+        self.camera.getProperty('backlight_compensation').set(0)
+        self.camera.getProperty('exposure_auto').set(1)
+        self.camera.getProperty('exposure_absolute').set(157)
+        self.camera.getProperty('exposure_auto_priority').set(1)
 
-            test = self.camera.setConfigJson(self.jsonConfig)
-            if not test:
-                log.warning("Camera {} config not applied".format(self.name))
-            # self.camera.setExposureAuto(0.25)
-            self.camera.setExposureManual(-9)
-            self.camera.setExposureHoldCurrent()
-
+        log.info("Initializing CV Sink")
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)
-        if grayscale:
-            self.frame = np.zeros([camera_params['height'], camera_params['width']], dtype=np.uint8)
-        else:
-            self.frame = np.zeros([camera_params['height'], camera_params['width'], 3], dtype=np.uint8)
+        # self.cap = cv2.VideoCapture(0)
+        # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)
+        # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
+        # self.cap.set(cv2.CAP_PROP_FPS, 50)
+
+        self.frame = np.zeros([camera_params['height'], camera_params['width'], 3], dtype=np.uint8)
 
         self.timestamp = 0
+        self.fpsHandler = FPSHandler()
         if enable_threading:
             thread = Thread(target=self._run, daemon=True)
             thread.start()
         else:
             self._run()
+
+        log.info("Done Setting Up CSCoreCamera")
 
     def _run(self):
         while True:
@@ -64,9 +86,8 @@ class CSCoreCamera:
                 log.error(self.cvSink.getError())
                 self.timestamp = 0
                 continue
-            if len(frame.shape) > 2:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
+            self.fpsHandler.nextIter()
             self.frame = frame
             self.timestamp = timestamp
 
@@ -82,15 +103,37 @@ class CSCoreCamera:
     def getName(self):
         return self.name
 
-    def getConfig(self):
-        return self.jsonConfig
-
-    def getControl(self):
-        return self.jsonControl
+    def getFpsCounter(self):
+        return self.fpsHandler
 
 
 if __name__ == '__main__':
     # Test camera init
-    enable_threading = False
-    CSCoreCamera("usbcam", True)
+    enable_threading = True
+    camera_params = generateCameraParameters("OV2311_1")
+    camera = CSCoreCamera(camera_params, enable_threading)
 
+    # while True:
+    #     timestamp, test = camera.getFrame()
+    #     cv2.imshow("Test", test)
+    #
+    #     key = cv2.waitKey(1)
+    #     if key == ord('q'):
+    #         break
+
+    mjpegServer = cscore.MjpegServer("test", 5800)
+    cvSource = cscore.CvSource("cvsource", cscore.VideoMode.PixelFormat.kMJPEG, 1600, 1200, 50)
+    mjpegServer.setSource(cvSource)
+
+    cscore.CameraServer.addServer(mjpegServer)
+    test = np.zeros(shape=(1600, 1200, 3), dtype=np.uint8)
+    print("Start Capture...")
+    while True:
+        time, test = camera.getCvsink().grabFrame(test)
+        if time == 0:
+            print("error:", camera.getCvsink().getError())
+            continue
+
+        # print("got frame at time", time, test.shape)
+        log.debug("FPS: {:02f}".format(camera.getFpsCounter().fps()))
+        cvSource.putFrame(test)

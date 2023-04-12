@@ -15,6 +15,7 @@ import sys
 import robotpy_apriltag
 
 from common.mathUtils import inchesToMeters
+from cscore_utils.CVCamera import CVCamera
 
 Point = robotpy_apriltag.AprilTagDetection.Point
 
@@ -108,7 +109,7 @@ class AprilTagsUSBHost:
         self.camera_params = generateCameraParameters(self.device_name)
 
         log.info("Initializing Camera")
-        self.cameraSetup()
+        self.camera = CVCamera(self.camera_params)
         
         self.nt_drivetrain_tab = self.NT_Instance.getTable("Swerve")
         self.nt_apriltag_tab = self.NT_Instance.getTable(self.camera_params["nt_name"])
@@ -512,11 +513,6 @@ class AprilTagsUSBHost:
                 break
 
         return NT_Instance
-
-    def cameraSetup(self):
-        # if platform.system() == 'Linux':
-        #     os.system('./../coprocessors/startup/initCameraSettings.sh')
-        self.camera = CSCoreCamera(self.camera_params)
     
 
 if __name__ == '__main__':
