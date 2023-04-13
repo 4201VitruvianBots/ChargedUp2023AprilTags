@@ -14,8 +14,8 @@ def generateCameraParameters(deviceID):
     device_params = constants.CAMERAS[deviceType]
     deviceName = device_params['ids'][deviceID]
 
-    if os.path.isfile('{}.csv'.format(deviceName))
-        iMatrix = readCSV.iMatrix
+    if os.path.isfile('{}.csv'.format(deviceID)):
+        iMatrix = readCSV.readCsv(deviceID)
     else:
         iMatrix = constants.CAMERA_PARAMS[deviceName]["camera_matrix"][deviceID]
 

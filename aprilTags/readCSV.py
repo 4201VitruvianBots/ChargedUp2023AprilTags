@@ -52,7 +52,12 @@ def filter_data(row):
         fix_row.append(remove_space)
         continue
 
-    return fix_row
+    data_row = []
+    for i in fix_row:
+        if len(i) == 0:
+            continue
+        data_row.append(float(i))
+    return data_row
 
 
 def readCsv(filename):
@@ -64,7 +69,6 @@ def readCsv(filename):
 
     # runs filter to remove extra strings or spaces in data
     new_row = filter_data(new_row_list)
-    new_row.pop(4)  # remove 4th index as there is no value
 
     # turns matrix data array into a numpy matrix
     arr = np.array(new_row)
