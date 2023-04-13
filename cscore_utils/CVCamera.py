@@ -67,12 +67,12 @@ class CVCamera:
             self.cap.set(cv2.CAP_PROP_BRIGHTNESS, 0)
             self.cap.set(cv2.CAP_PROP_SHARPNESS, 3)
             self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1)
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, 157)
+            self.cap.set(cv2.CAP_PROP_EXPOSURE, 20)
             self.cap.set(cv2.CAP_PROP_GAIN, 0)
             self.cap.set(cv2.CAP_PROP_SHARPNESS, 3)
             self.cap.set(cv2.CAP_PROP_AUTO_WB, 1)
             self.cap.set(cv2.CAP_PROP_CONTRAST, 32)
-            self.cap.set(cv2.CAP_PROP_GAMMA, 100)
+            self.cap.set(cv2.CAP_PROP_GAMMA, 0)
             self.cap.set(cv2.CAP_PROP_HUE, 0)
             self.cap.set(cv2.CAP_PROP_SATURATION, 64)
 
@@ -98,7 +98,16 @@ class CVCamera:
                 if retval:
                     self.fpsHandler.nextIter()
                     log.debug("FPS: {}".format(self.fpsHandler.fps()))
-                    self.frameQueue.put_nowait((timestamp, frame))
+                    try:
+                        if self.frameQueue.full():
+                            if self.frameQueue.full():
+                                dropFrame = self.frameQueue.get(block=False, timeout=0.02)
+                            else:
+                                self.frameQueue.put((timestamp, frame), block=False, timeout=0.02)
+                        else:
+                            self.frameQueue.put((timestamp, frame), block=False, timeout=0.02)
+                    except Exception as e:
+                        log.debug("Frame queue error")
                 else:
                     log.error("Error capturing frames")
                 # time.sleep(self.FPS_MS)

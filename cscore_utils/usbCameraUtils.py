@@ -7,9 +7,9 @@ from aprilTags import readCSV
 
 
 def generateCameraParameters(deviceID):
-    deviceType = 'Left_Localizers'
-    if deviceID in constants.CAMERAS['Right_Localizers']['ids'].keys():
-        deviceType = 'Right_Localizers'
+    deviceType = 'Left_Localizer'
+    if deviceID in constants.CAMERAS['Right_Localizer']['ids'].keys():
+        deviceType = 'Right_Localizer'
     device_params = constants.CAMERAS[deviceType]
     deviceName = device_params['ids'][deviceID]
 

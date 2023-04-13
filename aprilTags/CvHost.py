@@ -50,7 +50,7 @@ parser.add_argument('-ds', dest='decode_sharpening', action="store", type=float,
                     help='decode_sharpening (default: 0.25)')
 parser.add_argument('-r', dest='record_video', action="store_true", default=False, help='Record video data')
 parser.add_argument('-dic', dest='tag_dictionary', action="store", type=str, default='test', help='Set Tag Dictionary')
-parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Left_Localizers', 'Right_Localizers'])
+parser.add_argument('-p', dest='position', action="store", type=str, help='Enforce Device Position', choices=['Left_Localizer', 'Right_Localizer'])
 parser.add_argument('-ip', dest='ip', action="store", type=str, help='Set IP Address', default=None)
 parser.add_argument('-port', dest='ports', action="store", type=str, help='Set MJPEG Server Ports (default: 5800, 5801)', default="5800, 5801")
 parser.add_argument('-dev', dest='dev', action="store", type=str, help='Set Device Name (default: OV2311_1)', default="OV2311_1")
@@ -92,7 +92,7 @@ class AprilTagsUSBHost:
 
         self.valid_cameras = None
         if args.position is not None:
-            self.valid_cameras = constants.CAMERAS[args.p]
+            self.valid_cameras = constants.CAMERAS[args.position]
 
         self.fps = utils.FPSHandler()
 
