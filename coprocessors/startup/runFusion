@@ -3,4 +3,4 @@
 pkill -f CvHost
 export PYTHONUNBUFFERED=1
 cd /home/pi/ChargedUp2023AprilTags
-exec /usr/bin/python3 aprilTags/CvHost.py -port 5800,5801 &
+exec /usr/bin/python3 aprilTags/SensorFusionServer.py

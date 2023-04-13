@@ -5,7 +5,7 @@ TAG_SIZE_M = 0.1524
 PADDING_PERCENTAGE = 0.31
 
 CAMERAS = {
-    'Left_Localizers': {
+    'Left_Localizer': {
         # X, Y Z
         'mount_offset': [0, 0, 0],
         # pitch, roll, yaw
@@ -20,7 +20,7 @@ CAMERAS = {
             'OV2311': 'OV2311',
         }
     },
-    'Right_Localizers': {
+    'Right_Localizer': {
         # X, Y Z
         'mount_offset': [0, 0, 0],
         # pitch, roll, yaw
