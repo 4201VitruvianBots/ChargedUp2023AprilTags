@@ -1,4 +1,5 @@
 import math
+import os
 
 import numpy as np
 
@@ -13,7 +14,10 @@ def generateCameraParameters(deviceID):
     device_params = constants.CAMERAS[deviceType]
     deviceName = device_params['ids'][deviceID]
 
-    iMatrix = readCSV.iMatrix
+    if os.path.isfile('{}.csv'.format(deviceName))
+        iMatrix = readCSV.iMatrix
+    else:
+        iMatrix = constants.CAMERA_PARAMS[deviceName]["camera_matrix"][deviceID]
 
     if iMatrix.shape == (1, 9) or iMatrix.shape == (9, 1):
         iMatrix.reshape([3, 3])

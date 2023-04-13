@@ -55,19 +55,22 @@ def filter_data(row):
     return fix_row
 
 
-# loads csv file
-new_list = load_data('./../aprilTags/OV2311_1.csv')
+def readCsv(filename):
+    # loads csv file
+    new_list = load_data("{}.csv".format(filename))
 
-# creates a new array with only index 11 and 12: camera_matrix's data
-new_row_list = [row for idx, row in enumerate(new_list) if idx in (11, 12)]
+    # creates a new array with only index 11 and 12: camera_matrix's data
+    new_row_list = [row for idx, row in enumerate(new_list) if idx in (11, 12)]
 
-# runs filter to remove extra strings or spaces in data
-new_row = filter_data(new_row_list)
-new_row.pop(4)  # remove 4th index as there is no value
+    # runs filter to remove extra strings or spaces in data
+    new_row = filter_data(new_row_list)
+    new_row.pop(4)  # remove 4th index as there is no value
 
-# turns matrix data array into a numpy matrix
-arr = np.array(new_row)
-iMatrix = np.reshape(arr, (3, 3))
+    # turns matrix data array into a numpy matrix
+    arr = np.array(new_row)
+    iMatrix = np.reshape(arr, (3, 3))
 
-# prints resultant
-print(iMatrix)
+    # prints resultant
+    print(iMatrix)
+
+    return iMatrix
