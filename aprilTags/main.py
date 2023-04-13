@@ -2,6 +2,8 @@ import argparse
 import copy
 from time import sleep
 
+
+
 import cv2
 import depthai as dai
 import logging
@@ -413,7 +415,6 @@ class AprilTagsHost:
             log.error("Could not connect to NetworkTables. Restarting server...")
 
         return NT_Instance
-
 
 if __name__ == '__main__':
     log.info("Starting AprilTagsHost")
