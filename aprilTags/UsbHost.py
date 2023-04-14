@@ -137,7 +137,7 @@ class AprilTagsUSBHost:
                                           fps=self.camera_params["fps"])
 
         self.detector = AprilTagDetector(args, self.camera_params)
-        self.tagAngleThreshold = 5.0
+        self.tagAngleThreshold = 15.0
         self.tagDistanceThreshold = inchesToMeters(90)
 
         self.gyro = None

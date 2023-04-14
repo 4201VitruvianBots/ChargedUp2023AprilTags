@@ -30,7 +30,9 @@ class CSCoreCamera:
 
         log.info("Initializing Camera Settings")
         self.camera.setConnectionStrategy(cscore.VideoCamera.ConnectionStrategy.kConnectionKeepOpen)
-        self.camera.setVideoMode(cscore.VideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params['height'], camera_params['width'], camera_params['fps']))
+        self.camera.setVideoMode(
+            cscore.VideoMode(cscore.VideoMode.PixelFormat.kMJPEG, camera_params['height'], camera_params['width'],
+                             camera_params['fps']))
         # if platform.system() == 'Windows':
         #     settings = open("utils/{}_config.json".format(self.name))
         #     self.jsonConfig = json.load(settings)
@@ -44,19 +46,23 @@ class CSCoreCamera:
         #     self.camera.setExposureManual(-9)
         #     self.camera.setExposureHoldCurrent()
         # elif platform.system() == 'Linux':
-        self.camera.getProperty('brightness').set(0)
-        self.camera.getProperty('contrast').set(32)
-        self.camera.getProperty('saturation').set(64)
-        self.camera.getProperty('hue').set(0)
-        self.camera.getProperty('white_balance_temperature_auto').set(1)
-        self.camera.getProperty('gamma').set(100)
-        self.camera.getProperty('gain').set(0)
-        self.camera.getProperty('power_line_frequency').set(2)
-        self.camera.getProperty('sharpness').set(3)
-        self.camera.getProperty('backlight_compensation').set(0)
-        self.camera.getProperty('exposure_auto').set(1)
-        self.camera.getProperty('exposure_absolute').set(157)
-        self.camera.getProperty('exposure_auto_priority').set(1)
+        self.camera.getProperty('brightness').set(0)  # 0
+        self.camera.getProperty('contrast').set(32)  # 32
+        self.camera.getProperty('saturation').set(64)  # 64
+        self.camera.getProperty('hue').set(0)  # 0
+        self.camera.getProperty('white_balance_temperature_auto').set(1)  # 1
+        self.camera.getProperty('gamma').set(100)  # 100
+        self.camera.getProperty('gain').set(0)  # 0
+        self.camera.getProperty('power_line_frequency').set(2)  # 2
+        self.camera.getProperty('sharpness').set(3)  # 3
+        self.camera.getProperty('backlight_compensation').set(0)  # 0
+        self.camera.getProperty('exposure_auto').set(1)  # 1
+        self.camera.getProperty('exposure_absolute').set(157)  # 157
+        self.camera.getProperty('exposure_auto_priority').set(1)  # 1
+        # brightness: 84
+        # contrast: 29
+        # sharpness: 96
+        # saturation: 9
 
         log.info("Initializing CV Sink")
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
