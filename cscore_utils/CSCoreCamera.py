@@ -21,7 +21,7 @@ log.setLevel(logging.DEBUG)
 class CSCoreCamera:
     def __init__(self, camera_params, enable_threading=True):
         self.name = camera_params["device_id"]
-        deviceId = 0
+        deviceId = 1
         for caminfo in cscore.UsbCamera.enumerateUsbCameras():
             print("%s: %s (%s)" % (caminfo.dev, caminfo.path, caminfo.name))
             if caminfo.name == self.name:
@@ -67,7 +67,7 @@ class CSCoreCamera:
         log.info("Initializing CV Sink")
         self.cvSink = cscore.CvSink("{}_cvsink".format(self.name))
         self.cvSink.setSource(self.camera)
-        # self.cap = cv2.VideoCapture(0)
+         # self.cap = cv2.VideoCapture(0)
         # self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1600)
         # self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1200)
         # self.cap.set(cv2.CAP_PROP_FPS, 50)
