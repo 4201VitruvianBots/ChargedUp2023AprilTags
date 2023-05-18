@@ -10,6 +10,9 @@ from typing import List
 
 import numpy as np
 
+from cscore_utils.CSCoreCamera import CSCoreCamera
+from cscore_utils.usbCameraUtils import generateCameraParameters
+
 os.environ["OPENCV_VIDEOIO_MSMF_ENABLE_HW_TRANSFORMS"] = "0"
 import cv2
 
@@ -155,14 +158,15 @@ def main():
             if not retVal:
                 print("warning: No corners found in image: {}".format(imageFile))
     else:
-        camera = CVCamera(0)
+        camera_params = generateCameraParameters("OV2311")
+        camera = CSCoreCamera(camera_params)
 
         maxSamples = 20
         sampleCount = 0
         waitForInput = False
 
         while sampleCount < maxSamples:
-            rawFrame = camera.getFrame()
+            timestamp, rawFrame = camera.getFrame()
 
             cv2.imshow("Frame", rawFrame)
             # print("Exposure: {}\tWhite Balance: {}".format(camera.get(cv2.CAP_PROP_EXPOSURE), camera.get(cv2.CAP_PROP_WB_TEMPERATURE)))
